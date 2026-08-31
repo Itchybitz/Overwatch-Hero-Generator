@@ -9,7 +9,12 @@
   <meta property="og:url" content="https://owherogenerator.com/">
   <meta property="og:title" content="Overwatch Slots">
   <meta property="og:description" content="Spin the wheel. Play what fate gives you. A fan-made hero randomizer for your Overwatch squad.">
-  <meta name="twitter:card" content="summary">
+  <meta property="og:image" content="https://owherogenerator.com/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#0c101a">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎰</text></svg>">
 </head>
@@ -34,14 +39,24 @@
               <button class="seg-btn" data-mode="6v6">6v6 <small>2-2-2</small></button>
             </div>
           </div>
-          <label class="control-group toggle-group" title="Show hero portraits on the result cards">
-            <span class="control-label">Portraits</span>
-            <input type="checkbox" id="portrait-toggle" class="switch-input">
-            <span class="switch"></span>
-          </label>
           <label class="control-group toggle-group" title="Also roll which minor and major perk each player takes">
             <span class="control-label">Perks</span>
             <input type="checkbox" id="perk-toggle" class="switch-input">
+            <span class="switch"></span>
+          </label>
+          <label class="control-group toggle-group" title="Also deal each player a random dare to follow — with the occasional team-wide one. Write your own in House Dares below.">
+            <span class="control-label">Dares</span>
+            <input type="checkbox" id="challenge-toggle" class="switch-input">
+            <span class="switch"></span>
+          </label>
+          <button id="more-controls" class="gear-btn" type="button" aria-expanded="false"
+                  aria-controls="controls-secondary" title="More options">⚙</button>
+        </div>
+        <!-- preferences live behind the gear so first-timers see names → SPIN -->
+        <div class="controls-row controls-secondary" id="controls-secondary" hidden>
+          <label class="control-group toggle-group" title="Show hero portraits on the result cards">
+            <span class="control-label">Portraits</span>
+            <input type="checkbox" id="portrait-toggle" class="switch-input">
             <span class="switch"></span>
           </label>
           <label class="control-group toggle-group" title="Slot-machine sound effects">
@@ -65,6 +80,7 @@
         </div>
         <div id="player-list" class="player-list"></div>
         <button id="add-player" class="btn btn-ghost">+ Add player</button>
+        <p id="bench-note" class="bench-note" hidden></p>
       </section>
 
       <!-- Hero pool -->
@@ -81,6 +97,38 @@
         </details>
       </section>
 
+      <!-- House dares: write-your-own challenges, saved in this browser -->
+      <section class="panel">
+        <details id="dares-details">
+          <summary class="panel-header pool-summary">
+            <h2>House Dares <span class="count-badge" id="dares-count"></span></h2>
+            <span class="pool-hint">write your own dares into the deck</span>
+          </summary>
+          <p id="dares-off-note" class="dares-off-note" hidden>
+            Dares are switched off —
+            <button id="dares-enable" class="inline-link" type="button">turn them on</button>
+            and these get dealt with the rest.
+          </p>
+          <form id="dare-form" class="dare-form">
+            <select id="dare-target" class="dare-select" aria-label="Who the dare applies to">
+              <option value="player" selected>Anyone</option>
+              <option value="tank">Tank only</option>
+              <option value="damage">Damage only</option>
+              <option value="support">Support only</option>
+              <option value="hero">A specific hero…</option>
+              <option value="team">Whole team</option>
+            </select>
+            <select id="dare-hero" class="dare-select" hidden aria-label="Which hero"></select>
+            <input id="dare-text" class="player-input dare-input" type="text" maxlength="140"
+                   placeholder="e.g. Do a full spin before every ult…" aria-label="Dare text">
+            <button class="btn btn-ghost dare-add" type="submit">+ Add dare</button>
+          </form>
+          <p id="dares-empty" class="dares-empty">No house dares yet. Write one above — it gets
+            shuffled into the deck with the built-in ones and saved in this browser.</p>
+          <div id="dare-list" class="dare-list"></div>
+        </details>
+      </section>
+
       </div><!-- /setup-col -->
 
       <!-- Results: the slot machine — spin button + team -->
@@ -92,6 +140,10 @@
           <p id="stale-link-note" class="spin-warning" role="status" hidden>That share link couldn't be replayed — it references heroes that are no longer in the roster.</p>
         </div>
         <p id="shared-note" class="shared-note" hidden>Someone shared this team with you — hit SPIN to roll your own!</p>
+        <div id="team-challenge" class="team-challenge" hidden>
+          <span class="team-challenge-label" id="team-challenge-label">💥 Team dare</span>
+          <span id="team-challenge-text"></span>
+        </div>
         <div class="share-row" id="share-row" hidden>
           <button id="share-link" class="btn btn-ghost btn-small" aria-live="polite" title="Copy a link that shows this exact team">🔗 Share link</button>
           <button id="copy-text" class="btn btn-ghost btn-small" aria-live="polite" title="Copy the team as text for Discord">📋 Copy as text</button>
@@ -126,6 +178,8 @@
         <li>5v5 (1&#8209;2&#8209;2) and 6v6 (2&#8209;2&#8209;2) team comps, or a solo spin just for you</li>
         <li>Cross out roles per player, or ban heroes from the pool entirely</li>
         <li>Roll minor and major perks, reroll individual players, and share the team with one link</li>
+        <li>Feeling brave? Turn on dare rolls and let the slots push your luck too</li>
+        <li>Make it personal — write house dares for your group; they're saved in your browser and dealt out with the rest</li>
       </ul>
       <p>
         Found a bug or have an idea? Open an issue on
@@ -141,6 +195,7 @@
 
   <script src="heroes.js"></script>
   <script src="perks.js"></script>
+  <script src="challenges.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

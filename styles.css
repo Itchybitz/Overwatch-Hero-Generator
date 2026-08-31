@@ -1,6 +1,7 @@
 /* ── Overwatch Slots ─────────────────────────────────────── */
 
 :root {
+  color-scheme: dark; /* native form popups (selects) render dark */
   --bg: #0c101a;
   --bg-panel: rgba(26, 33, 48, 0.85);
   --bg-panel-2: #232d42;
@@ -39,15 +40,24 @@
 
 body {
   background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  min-height: 100vh;
+}
+
+/* the ambient glow lives on a fixed pseudo-element — background-attachment: fixed
+   repaints on every scroll frame on mobile, this composites once */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background-image:
     radial-gradient(ellipse 90% 55% at 50% -12%, rgba(249, 158, 26, 0.13), transparent),
     radial-gradient(ellipse 55% 40% at 100% 105%, rgba(90, 168, 240, 0.08), transparent),
     radial-gradient(ellipse 45% 35% at 0% 100%, rgba(94, 227, 154, 0.05), transparent),
     repeating-linear-gradient(-55deg, transparent 0 34px, rgba(255, 255, 255, 0.014) 34px 35px);
-  background-attachment: fixed;
-  color: var(--text);
-  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  min-height: 100vh;
 }
 
 .page {
@@ -259,6 +269,34 @@ body {
 }
 .switch-input:checked + .switch::after { transform: translateX(21px); background: #1a1408; }
 
+/* the board-rewriting toggles lock while the reels run */
+.switch-input:disabled + .switch { opacity: 0.45; }
+
+.gear-btn {
+  appearance: none;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 9px;
+  width: 36px; height: 36px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, transform 0.3s;
+}
+
+.gear-btn:hover, .gear-btn[aria-expanded="true"] {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+
+.gear-btn[aria-expanded="true"] { transform: rotate(90deg); }
+
+.controls-secondary {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
 /* ── Players ── */
 .player-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 
@@ -354,6 +392,13 @@ body {
   background: rgba(240, 101, 90, 0.08);
 }
 
+.bench-note {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-style: italic;
+  margin-top: 8px;
+}
+
 /* ── Buttons ── */
 .btn {
   appearance: none;
@@ -380,11 +425,13 @@ body {
 .btn-small { padding: 5px 14px; font-size: 0.85rem; }
 
 /* ── Hero pool ── */
-#pool-details summary { list-style: none; cursor: pointer; }
-#pool-details summary::-webkit-details-marker { display: none; }
+#pool-details summary, #dares-details summary { list-style: none; cursor: pointer; }
+#pool-details summary::-webkit-details-marker,
+#dares-details summary::-webkit-details-marker { display: none; }
 
 .pool-summary { margin-bottom: 0; align-items: center; flex-wrap: wrap; }
-#pool-details[open] .pool-summary { margin-bottom: 14px; }
+#pool-details[open] .pool-summary,
+#dares-details[open] .pool-summary { margin-bottom: 14px; }
 
 .pool-summary::before {
   content: "▸";
@@ -394,7 +441,8 @@ body {
   transition: transform 0.15s;
 }
 
-#pool-details[open] .pool-summary::before { transform: rotate(90deg); }
+#pool-details[open] .pool-summary::before,
+#dares-details[open] .pool-summary::before { transform: rotate(90deg); }
 
 .pool-hint { color: var(--text-dim); font-size: 0.78rem; font-style: italic; }
 
@@ -709,6 +757,158 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* ── Challenge rolls ── */
+.challenge-row {
+  margin-top: 8px;
+  position: relative;
+  z-index: 1;
+  transition: opacity 0.3s ease 0.25s, transform 0.3s ease 0.25s;
+}
+
+/* like perks, the dare reveals only after the hero locks in */
+.result-card.spinning .challenge-row {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: none;
+}
+
+.challenge-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(249, 158, 26, 0.07);
+  border: 1px dashed rgba(249, 158, 26, 0.45);
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-width: 0;
+}
+
+.challenge-chip .perk-tag {
+  color: var(--orange);
+  border: 1px solid rgba(249, 158, 26, 0.5);
+}
+
+.challenge-text {
+  font-size: 0.88rem;
+  line-height: 1.3;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* a house (user-written) dare reads solid instead of dashed */
+.challenge-chip.custom { border-style: solid; }
+
+/* ── House dares panel ── */
+.dare-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dare-input { flex: 1; min-width: 180px; }
+
+.dare-select {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  font: inherit;
+  padding: 9px 10px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dare-select:focus {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(249, 158, 26, 0.15);
+}
+
+.dares-empty, .dares-off-note {
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 0.88rem;
+}
+
+.dares-off-note { margin-bottom: 10px; }
+
+.inline-link {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--orange);
+  font: inherit;
+  font-style: italic;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.inline-link:hover { color: var(--orange-bright); }
+
+.dare-list { display: flex; flex-direction: column; gap: 8px; }
+
+.dare-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: card-in 0.35s ease-out backwards;
+}
+
+.dare-row .challenge-chip { flex: 1; min-width: 0; }
+.dare-row .remove-player { width: 30px; height: 30px; font-size: 0.85rem; }
+
+.dare-tag {
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 2px 7px 1px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  color: var(--orange);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dare-tag.tank { color: var(--tank); }
+.dare-tag.damage { color: var(--damage); }
+.dare-tag.support { color: var(--support); }
+.dare-tag .chip-dot { width: 7px; height: 7px; }
+
+/* input shake on a rejected add (keyframes shared with the reroll shake) */
+.dare-input.shake { animation: shake 0.3s; }
+
+/* team-wide dare banner above the cards */
+.team-challenge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  text-align: center;
+  background: linear-gradient(160deg, rgba(249, 158, 26, 0.12), rgba(249, 158, 26, 0.04));
+  border: 1px dashed rgba(249, 158, 26, 0.55);
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin: -2px 0 14px;
+  animation: card-in 0.35s ease-out backwards;
+}
+
+.team-challenge-label {
+  font-family: var(--font-display);
+  color: var(--orange);
+  font-weight: 800;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
 /* make room for the portrait */
 .result-card.has-portrait { min-height: 142px; }
 .result-card.has-portrait .result-player,
@@ -986,6 +1186,9 @@ body {
   .btn-spin::after { animation: none !important; }
   .result-card,
   .result-card *,
+  .team-challenge,
+  .dare-row,
+  .dare-input,
   .reroll-btn { animation: none !important; transition: none !important; }
   .result-card.spinning .result-hero,
   .result-card.spinning:not(.role-locked) .result-role { filter: none; }
@@ -998,6 +1201,8 @@ body {
   .reroll-btn { width: 40px; height: 40px; }
   .btn-small { padding: 9px 16px; }
   .role-pick { width: 40px; height: 40px; }
+  .dare-select { padding: 11px 12px; }
+  .dare-row .remove-player { width: 40px; height: 40px; }
 }
 
 /* tighter vertical rhythm on shorter screens so the team needs less scrolling */

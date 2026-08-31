@@ -20,6 +20,9 @@ const ROLE_ICONS = {
 
 const STORAGE_KEY = "ow-slots-v1";
 
+const MAX_DARE_LEN = 140; // longest built-in dare is ~95 chars
+const MAX_CUSTOM_DARES = 100;
+
 const ROLE_CSS_COLOR = { tank: "#5aa8f0", damage: "#f0655a", support: "#5ee39a" };
 const heroColor = name =>
   HEROES.find(h => h.name === name)?.color ||
@@ -32,18 +35,22 @@ const state = {
   players: ["", "", "", "", ""],
   playerBans: [[], [], [], [], []], // per-player excluded roles, aligned with players
   benched: [], // {name, bans} trimmed off by a mode switch, restored on the next size-up
+  customDares: [], // {text, target} — target: "player" | "team" | a role | an exact hero name
   banned: new Set(),
   instant: false,
   portraits: true,
   perks: true,
+  challenges: false,
   sound: true,
   poolOpen: false,
-  results: null, // [{ player, role, hero, perkMinor?, perkMajor? }]
+  daresOpen: false,
+  results: null, // [{ player, role, hero, perkMinor?, perkMajor?, challenge? }]
+  teamChallenge: null, // team-wide dare for the current results
   spinning: false,
 };
 
-// Settings flipped while an animation runs get applied when it finishes.
-const pendingToggle = { portraits: false, perks: false };
+// The last spin's player → hero deal; a repeat feels rigged even when it's fair.
+let lastSpinHeroes = {};
 
 // ── Persistence ──────────────────────────────────────────────
 
@@ -54,12 +61,15 @@ function saveState() {
       players: state.players,
       playerBans: state.playerBans,
       benched: state.benched,
+      customDares: state.customDares,
       banned: [...state.banned],
       instant: state.instant,
       portraits: state.portraits,
       perks: state.perks,
+      challenges: state.challenges,
       sound: state.sound,
       poolOpen: state.poolOpen,
+      daresOpen: state.daresOpen,
     }));
   } catch { /* storage unavailable — the session still works, it just won't persist */ }
 }
@@ -85,6 +95,15 @@ function loadState() {
           bans: Array.isArray(b.bans) ? b.bans.filter(r => ROLE_ORDER.includes(r)) : [],
         }));
     }
+    if (Array.isArray(saved.customDares)) {
+      const heroNames = new Set(HEROES.map(h => h.name));
+      const validTarget = t =>
+        t === "player" || t === "team" || ROLE_ORDER.includes(t) || heroNames.has(t);
+      state.customDares = saved.customDares
+        .filter(d => d && typeof d.text === "string" && d.text.trim() && validTarget(d.target))
+        .slice(0, MAX_CUSTOM_DARES)
+        .map(d => ({ text: d.text.trim().slice(0, MAX_DARE_LEN), target: d.target }));
+    }
     if (Array.isArray(saved.banned)) {
       const names = new Set(HEROES.map(h => h.name));
       state.banned = new Set(saved.banned.filter(n => names.has(n)));
@@ -92,8 +111,10 @@ function loadState() {
     state.instant = !!saved.instant;
     state.portraits = saved.portraits !== false; // default on
     state.perks = saved.perks !== false; // default on
+    state.challenges = !!saved.challenges; // default off
     state.sound = saved.sound !== false; // default on
     state.poolOpen = !!saved.poolOpen;
+    state.daresOpen = !!saved.daresOpen;
   } catch { /* corrupted storage — start fresh */ }
 }
 
@@ -329,7 +350,13 @@ function renderPlayers() {
         if (idx >= 0) bans.splice(idx, 1);
         else bans.push(role);
         saveState();
-        renderPlayers();
+        // toggle this button in place — a full re-render would steal keyboard focus
+        const nowExcluded = idx < 0;
+        b.classList.toggle("excluded", nowExcluded);
+        b.setAttribute("aria-pressed", String(nowExcluded));
+        b.title = nowExcluded
+          ? `${playerLabel(i)} won't roll ${ROLE_LABEL[role]} — click to allow it`
+          : `Stop ${playerLabel(i)} from rolling ${ROLE_LABEL[role]}`;
         updateSpinState();
       });
       picks.append(b);
@@ -344,6 +371,7 @@ function renderPlayers() {
       rm.title = "Remove player";
       rm.setAttribute("aria-label", `Remove player ${i + 1}`);
       rm.addEventListener("click", () => {
+        if (state.spinning) return;
         state.players.splice(i, 1);
         state.playerBans.splice(i, 1);
         saveState();
@@ -358,6 +386,14 @@ function renderPlayers() {
 
   playerCount.textContent = `${state.players.length} / ${teamSize()}`;
   addPlayerBtn.hidden = state.players.length >= teamSize();
+
+  // benched players are invisible otherwise — say where they went
+  const benched = state.benched.length;
+  $("bench-note").hidden = !benched;
+  if (benched) {
+    $("bench-note").textContent =
+      `${benched} player${benched === 1 ? "" : "s"} benched — switch to a bigger mode to bring them back.`;
+  }
 }
 
 function renderPool() {
@@ -385,10 +421,15 @@ function renderPool() {
       chip.setAttribute("aria-pressed", String(heroBanned));
       chip.title = heroBanned ? "Click to re-enable" : "Click to ban";
       chip.addEventListener("click", () => {
-        if (state.banned.has(hero.name)) state.banned.delete(hero.name);
-        else state.banned.add(hero.name);
+        const nowBanned = !state.banned.has(hero.name);
+        if (nowBanned) state.banned.add(hero.name);
+        else state.banned.delete(hero.name);
         saveState();
-        renderPool();
+        // toggle this chip in place — rebuilding the grid would steal keyboard focus
+        chip.classList.toggle("banned", nowBanned);
+        chip.setAttribute("aria-pressed", String(nowBanned));
+        chip.title = nowBanned ? "Click to re-enable" : "Click to ban";
+        poolCount.textContent = `${HEROES.length - state.banned.size} / ${HEROES.length}`;
         updateSpinState();
       });
       grid.append(chip);
@@ -402,11 +443,64 @@ function renderPool() {
   poolCount.textContent = `${enabled} / ${HEROES.length}`;
 }
 
+// Human label for a house dare's target (list rows).
+const dareTargetLabel = t =>
+  t === "player" ? "anyone" : t === "team" ? "team" : ROLE_LABEL[t] || t;
+
+function renderDares() {
+  const list = $("dare-list");
+  list.innerHTML = "";
+  state.customDares.forEach((dare, i) => {
+    const row = document.createElement("div");
+    row.className = "dare-row";
+
+    const chip = document.createElement("div");
+    chip.className = "challenge-chip custom";
+
+    const tag = document.createElement("span");
+    tag.className = "dare-tag" + (ROLE_ORDER.includes(dare.target) ? ` ${dare.target}` : "");
+    const hero = HEROES.find(h => h.name === dare.target);
+    if (hero) {
+      const dot = document.createElement("span");
+      dot.className = "chip-dot";
+      dot.style.setProperty("--dot", hero.color || ROLE_CSS_COLOR[hero.role]);
+      tag.append(dot);
+    }
+    tag.append(document.createTextNode(dareTargetLabel(dare.target)));
+
+    const text = document.createElement("span");
+    text.className = "challenge-text";
+    text.textContent = dare.text;
+    chip.append(tag, text);
+
+    const rm = document.createElement("button");
+    rm.className = "remove-player";
+    rm.textContent = "✕";
+    rm.title = "Delete dare";
+    rm.setAttribute("aria-label", `Delete dare: ${dare.text}`);
+    rm.addEventListener("click", () => {
+      state.customDares.splice(i, 1);
+      saveState();
+      renderDares();
+    });
+
+    row.append(chip, rm);
+    list.prepend(row); // prepend flips array order: the newest dare lands on top
+  });
+
+  $("dares-count").textContent = state.customDares.length || "";
+  $("dares-empty").hidden = state.customDares.length > 0;
+  $("dares-off-note").hidden = state.challenges;
+}
+
 function updateSpinState() {
   const problem = spinProblem();
   spinBtn.disabled = state.spinning || !!problem;
   spinWarning.hidden = !problem;
   if (problem) spinWarning.textContent = problem;
+  // these rewrite the dealt board, so they lock while the reels run
+  portraitToggle.disabled = perkToggle.disabled = challengeToggle.disabled = state.spinning;
+  $("share-link").disabled = $("copy-text").disabled = state.spinning || !state.results;
 }
 
 function setCardHeroColor(card, heroName) {
@@ -424,6 +518,98 @@ function rollPerks(result) {
   } else {
     delete result.perkMinor;
     delete result.perkMajor;
+  }
+}
+
+// House dares (user-written) aimed at one target: "player", a role, a hero name, or "team".
+const customDaresFor = target =>
+  state.customDares.filter(d => d.target === target).map(d => d.text);
+
+const isCustomDare = text => state.customDares.some(d => d.text === text);
+
+// Every dare this hero/role combination could draw.
+const challengePoolFor = r => [
+  ...(typeof CHALLENGES !== "undefined" ? [
+    ...(CHALLENGES.player || []),
+    ...(CHALLENGES.role?.[r.role] || []),
+    ...(CHALLENGES.hero?.[r.hero] || []),
+  ] : []),
+  ...customDaresFor("player"),
+  ...customDaresFor(r.role),
+  ...customDaresFor(r.hero),
+];
+
+// Roll (or clear) the challenge dare for one result, in place.
+function rollChallenge(result, exclude = new Set()) {
+  if (!state.challenges) { delete result.challenge; return; }
+  const custom = [...customDaresFor("player"), ...customDaresFor(result.role), ...customDaresFor(result.hero)];
+  const heroPool = [
+    ...(typeof CHALLENGES !== "undefined" ? CHALLENGES.hero?.[result.hero] || [] : []),
+    ...customDaresFor(result.hero),
+  ];
+  // house dares are written for this exact group — first refusal 40% of the time;
+  // hero-specific dares are the next-best gags and jump the queue about a third of the time
+  const base =
+    custom.length && Math.random() < 0.4 ? custom :
+    heroPool.length && Math.random() < 0.35 ? heroPool :
+    challengePoolFor(result);
+  const fresh = base.filter(c => !exclude.has(c));
+  const pool = fresh.length ? fresh : base;
+  if (!pool.length) { delete result.challenge; return; }
+  result.challenge = pick(pool);
+}
+
+// A team-wide dare hits on roughly a quarter of spins — jackpot rules.
+function rollTeamChallenge() {
+  const custom = customDaresFor("team");
+  const pool = [
+    ...(typeof CHALLENGES !== "undefined" ? CHALLENGES.team || [] : []),
+    ...custom,
+  ];
+  state.teamChallenge =
+    state.challenges && (state.results?.length || 0) > 1 && pool.length && Math.random() < 0.25
+      ? (custom.length && Math.random() < 0.5 ? pick(custom) : pick(pool))
+      : null;
+}
+
+// Roll fresh dares for the whole board (or clear them when the toggle is off).
+function rerollAllChallenges() {
+  const taken = new Set();
+  state.results.forEach(r => {
+    rollChallenge(r, taken);
+    if (r.challenge) taken.add(r.challenge);
+  });
+  rollTeamChallenge();
+}
+
+// Add/replace the challenge chip on a card (removes it if nothing is rolled).
+function setCardChallenge(card, result) {
+  card.querySelector(".challenge-row")?.remove();
+  if (!result.challenge) return;
+  const row = document.createElement("div");
+  row.className = "challenge-row";
+  const custom = isCustomDare(result.challenge);
+  const chip = document.createElement("div");
+  chip.className = "challenge-chip" + (custom ? " custom" : "");
+  if (custom) chip.title = "One of your own house dares";
+  const tag = document.createElement("span");
+  tag.className = "perk-tag";
+  tag.textContent = custom ? "🏠 house" : "🎲 dare";
+  const text = document.createElement("span");
+  text.className = "challenge-text";
+  text.textContent = result.challenge;
+  chip.append(tag, text);
+  row.append(chip);
+  card.append(row);
+}
+
+// Show/hide the team-wide dare banner (kept hidden while reels spin).
+function renderTeamChallenge() {
+  $("team-challenge").hidden = !state.teamChallenge || !state.results || state.spinning;
+  if (state.teamChallenge) {
+    $("team-challenge-text").textContent = state.teamChallenge;
+    $("team-challenge-label").textContent =
+      isCustomDare(state.teamChallenge) ? "🏠 House rule" : "💥 Team dare";
   }
 }
 
@@ -522,6 +708,7 @@ function buildCard(result, index = 0) {
   card.append(watermarkSvg, roleEl, playerEl, reel, reroll);
   setCardPortrait(card, result.hero);
   setCardPerks(card, result);
+  setCardChallenge(card, result);
   return card;
 }
 
@@ -540,6 +727,7 @@ function renderResults() {
   const hasResults = !!state.results;
   shareRow.hidden = !hasResults;
   emptyNote.hidden = hasResults;
+  renderTeamChallenge();
   if (!hasResults) return;
   state.results.forEach((result, i) => resultsGrid.append(buildCard(result, i)));
 }
@@ -548,16 +736,9 @@ function renderResults() {
 function announceResults(prefix = "Team rolled") {
   if (!state.results) return;
   $("sr-results").textContent = `${prefix}: ` + state.results
-    .map(r => `${r.player}: ${ROLE_LABEL[r.role]}, ${r.hero}`)
-    .join(". ");
-}
-
-// Apply Portraits/Perks toggles that were flipped mid-animation.
-function applyPendingToggles() {
-  if (!pendingToggle.portraits && !pendingToggle.perks) return;
-  if (pendingToggle.perks && state.results) state.results.forEach(rollPerks);
-  pendingToggle.portraits = pendingToggle.perks = false;
-  renderResults();
+    .map(r => `${r.player}: ${ROLE_LABEL[r.role]}, ${r.hero}` + (r.challenge ? `, dare: ${r.challenge}` : ""))
+    .join(". ")
+    + (state.teamChallenge ? `. Team dare: ${state.teamChallenge}` : "");
 }
 
 // ── Sharing ──────────────────────────────────────────────────
@@ -574,9 +755,12 @@ function encodeResults() {
     r.hero,
     r.perkMinor ? r.perkMinor.name : null,
     r.perkMajor ? r.perkMajor.name : null,
+    r.challenge || null,
   ]);
-  const json = JSON.stringify(rows);
-  return btoa(unescape(encodeURIComponent(json)))
+  // plain rows unless a team dare needs carrying — keeps old-format links symmetrical
+  const json = JSON.stringify(state.teamChallenge ? { r: rows, t: state.teamChallenge } : rows);
+  const bytes = new TextEncoder().encode(json);
+  return btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
@@ -590,9 +774,11 @@ function findPerk(list, key) {
 function decodeSharedTeam(encoded) {
   try {
     const b64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
-    const rows = JSON.parse(decodeURIComponent(escape(atob(b64))));
+    const parsed = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))));
+    // legacy links are a bare rows array; newer ones wrap it to carry the team dare
+    const rows = Array.isArray(parsed) ? parsed : parsed.r;
     if (!Array.isArray(rows) || rows.length === 0 || rows.length > 6) return null;
-    return rows.map(([player, roleChar, hero, mi, ma]) => {
+    const results = rows.map(([player, roleChar, hero, mi, ma, dare]) => {
       const role = ROLE_FROM_CHAR[roleChar];
       if (!role || !HEROES.some(h => h.name === hero && h.role === role)) throw new Error("bad hero");
       const result = { player: String(player).slice(0, 24) || "Player", role, hero };
@@ -600,11 +786,24 @@ function decodeSharedTeam(encoded) {
       if (p) {
         const minor = findPerk(p.minor, mi);
         const major = findPerk(p.major, ma);
-        if (minor) result.perkMinor = minor;
-        if (major) result.perkMajor = major;
+        // only as a pair — a half-set perk pick crashes the card render and copy-as-text
+        if (minor && major) {
+          result.perkMinor = minor;
+          result.perkMajor = major;
+        }
+      }
+      // any dare text rides along — house dares aren't in the recipient's pools
+      if (typeof dare === "string" && dare.trim()) {
+        result.challenge = dare.trim().slice(0, MAX_DARE_LEN);
       }
       return result;
     });
+    const team = !Array.isArray(parsed)
+      && typeof parsed.t === "string"
+      && parsed.t.trim()
+      && results.length > 1
+      ? parsed.t.trim().slice(0, MAX_DARE_LEN) : null;
+    return { results, team };
   } catch {
     return null;
   }
@@ -623,10 +822,14 @@ function shareUrl() {
 
 function resultsAsText() {
   const lines = state.results.map(r => {
-    const perks = r.perkMinor ? ` (${r.perkMinor.name} / ${r.perkMajor.name})` : "";
-    return `${ROLE_EMOJI[r.role]} ${r.player} → ${r.hero}${perks}`;
+    const perks = r.perkMinor && r.perkMajor ? ` (${r.perkMinor.name} / ${r.perkMajor.name})` : "";
+    const dare = r.challenge ? `\n   ${isCustomDare(r.challenge) ? "🏠" : "🎲"} ${r.challenge}` : "";
+    return `${ROLE_EMOJI[r.role]} ${r.player} → ${r.hero}${perks}${dare}`;
   });
-  return `🎰 OVERWATCH SLOTS — ${MODE_LABEL[state.mode] || state.mode}\n${lines.join("\n")}\nSpin your own: ${shareUrl()}`;
+  const team = state.teamChallenge
+    ? `\n${isCustomDare(state.teamChallenge) ? "🏠 House rule" : "💥 Team dare"}: ${state.teamChallenge}`
+    : "";
+  return `🎰 OVERWATCH SLOTS — ${MODE_LABEL[state.mode] || state.mode}\n${lines.join("\n")}${team}\nSpin your own: ${shareUrl()}`;
 }
 
 async function copyToClipboard(text) {
@@ -652,7 +855,7 @@ function flashButton(btn, ok) {
   btn.dataset.label = original;
   btn.textContent = ok ? "✓ Copied!" : "✗ Couldn't copy";
   btn.disabled = true;
-  setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1400);
+  setTimeout(() => { btn.textContent = original; btn.disabled = state.spinning || !state.results; }, 1400);
 }
 
 // Load (or clear) a shared team from the current #team= hash.
@@ -662,7 +865,8 @@ function applySharedHash(announce = true) {
   if (!m) return;
   const shared = decodeSharedTeam(m[1]);
   if (shared) {
-    state.results = shared;
+    state.results = shared.results;
+    state.teamChallenge = shared.team;
     renderResults();
     $("shared-note").hidden = false;
     if (announce) announceResults("Shared team");
@@ -683,18 +887,27 @@ async function spin() {
 
   // Draw a unique hero for each assigned role.
   const taken = new Set();
+  const takenDares = new Set();
   const results = state.players.map((_, i) => {
     const role = roles[i];
-    const hero = pick(availableHeroes(role).filter(h => !taken.has(h.name)));
+    const label = playerLabel(i);
+    const options = availableHeroes(role).filter(h => !taken.has(h.name));
+    // skip whoever this player rolled last spin, as long as an alternative exists
+    const fresh = options.filter(h => h.name !== lastSpinHeroes[label]);
+    const hero = pick(fresh.length ? fresh : options);
     taken.add(hero.name);
-    const result = { player: playerLabel(i), role, hero: hero.name };
+    const result = { player: label, role, hero: hero.name };
     rollPerks(result);
+    rollChallenge(result, takenDares);
+    if (result.challenge) takenDares.add(result.challenge);
     return result;
   });
 
   // Display sorted Tank → Damage → Support.
   results.sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role));
   state.results = results;
+  lastSpinHeroes = Object.fromEntries(results.map(r => [r.player, r.hero]));
+  rollTeamChallenge();
   $("shared-note").hidden = true; // it's your own team now
   $("stale-link-note").hidden = true;
   if (/^#team=/.test(location.hash)) {
@@ -715,6 +928,7 @@ async function spin() {
   resultsGrid.innerHTML = "";
   shareRow.hidden = false;
   emptyNote.hidden = true;
+  renderTeamChallenge(); // hide any old team dare while the reels run
   revealResults();
 
   const cards = results.map((result, i) => {
@@ -775,9 +989,9 @@ async function spin() {
   clearInterval(ticker);
   state.spinning = false;
   updateSpinState();
+  renderTeamChallenge(); // the team dare lands with the fanfare
   // rerolls unlock only once the whole team is revealed
   cards.forEach(c => { c.querySelector(".reroll-btn").disabled = false; });
-  applyPendingToggles();
   sfx.fanfare();
   announceResults();
 }
@@ -820,17 +1034,21 @@ async function rerollHero(result, card, heroEl) {
   }
 
   result.hero = newHero;
+  lastSpinHeroes[result.player] = newHero; // next spin avoids the hero they kept
   rollPerks(result);
+  // a fresh dare too — excluding everyone's current ones so it visibly changes
+  const takenDares = new Set(state.results.map(r => r.challenge).filter(Boolean));
+  rollChallenge(result, takenDares);
   card.classList.remove("spinning");
   void card.offsetWidth;
   card.classList.add("locked");
   setCardHeroColor(card, newHero);
   setCardPortrait(card, newHero);
   setCardPerks(card, result);
+  setCardChallenge(card, result);
   heroEl.textContent = newHero;
   sfx.heroLock(0);
   announceResults("Rerolled");
-  applyPendingToggles();
 }
 
 // ── Events ───────────────────────────────────────────────────
@@ -865,24 +1083,95 @@ instantToggle.addEventListener("change", () => {
   saveState();
 });
 
+const moreControls = $("more-controls");
+moreControls.addEventListener("click", () => {
+  const sec = $("controls-secondary");
+  sec.hidden = !sec.hidden;
+  moreControls.setAttribute("aria-expanded", String(!sec.hidden));
+});
+
+// The board-rewriting toggles are disabled while a spin animation runs
+// (updateSpinState), so these handlers never race the reels.
 const portraitToggle = $("portrait-toggle");
 portraitToggle.addEventListener("change", () => {
   state.portraits = portraitToggle.checked;
   saveState();
-  if (state.spinning) pendingToggle.portraits = true; // applied when the animation ends
-  else if (state.results) renderResults();
+  if (state.results) renderResults();
 });
 
 const perkToggle = $("perk-toggle");
 perkToggle.addEventListener("change", () => {
   state.perks = perkToggle.checked;
   saveState();
-  if (state.spinning) {
-    pendingToggle.perks = true; // applied when the animation ends
-  } else if (state.results) {
+  if (state.results) {
     state.results.forEach(rollPerks); // rolls fresh picks, or clears them when off
     renderResults();
   }
+});
+
+const challengeToggle = $("challenge-toggle");
+challengeToggle.addEventListener("change", () => {
+  state.challenges = challengeToggle.checked;
+  saveState();
+  renderDares(); // the house-dares nudge tracks the toggle
+  if (state.results) {
+    rerollAllChallenges(); // rolls fresh dares, or clears them when off
+    renderResults();
+    announceResults(state.challenges ? "Dares dealt" : "Dares cleared");
+  }
+});
+
+// ── House dares ──────────────────────────────────────────────
+
+const dareTarget = $("dare-target");
+const dareHero = $("dare-hero");
+const dareText = $("dare-text");
+
+const DARE_PLACEHOLDERS = {
+  player: "e.g. Do a full spin before every ult…",
+  tank: "e.g. Apologize every time your shield breaks…",
+  damage: "e.g. Call your shots before you take them…",
+  support: "e.g. Heal whoever asks nicest first…",
+  team: "e.g. Everyone leaves spawn in single file…",
+  hero: name => `e.g. Only speak in ${name}'s voice all match…`,
+};
+
+// the effective target: the hero picker's value when "A specific hero…" is chosen
+const currentDareTarget = () => dareTarget.value === "hero" ? dareHero.value : dareTarget.value;
+
+function refreshDareForm() {
+  dareHero.hidden = dareTarget.value !== "hero";
+  dareText.placeholder = dareTarget.value === "hero"
+    ? DARE_PLACEHOLDERS.hero(dareHero.value)
+    : DARE_PLACEHOLDERS[dareTarget.value];
+}
+
+dareTarget.addEventListener("change", refreshDareForm);
+dareHero.addEventListener("change", refreshDareForm);
+
+$("dare-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const text = dareText.value.trim().slice(0, MAX_DARE_LEN);
+  const target = currentDareTarget();
+  const dupe = state.customDares.some(
+    d => d.target === target && d.text.toLowerCase() === text.toLowerCase());
+  if (!text || dupe || state.customDares.length >= MAX_CUSTOM_DARES) {
+    dareText.classList.remove("shake");
+    void dareText.offsetWidth; // restart animation
+    dareText.classList.add("shake");
+    return;
+  }
+  state.customDares.push({ text, target });
+  saveState();
+  renderDares();
+  dareText.value = "";
+  dareText.focus();
+  sfx.heroLock(2); // little "added to the deck" blip
+});
+
+$("dares-enable").addEventListener("click", () => {
+  challengeToggle.checked = true;
+  challengeToggle.dispatchEvent(new Event("change")); // runs the real handler, pendingToggle and all
 });
 
 const soundToggle = $("sound-toggle");
@@ -892,7 +1181,7 @@ soundToggle.addEventListener("change", () => {
 });
 
 addPlayerBtn.addEventListener("click", () => {
-  if (state.players.length >= teamSize()) return;
+  if (state.spinning || state.players.length >= teamSize()) return;
   state.players.push("");
   state.playerBans.push([]);
   saveState();
@@ -941,9 +1230,13 @@ window.addEventListener("hashchange", () => applySharedHash());
 const aboutModal = $("about-modal");
 $("about-link").addEventListener("click", () => aboutModal.showModal());
 $("about-close").addEventListener("click", () => aboutModal.close());
-// only backdrop clicks target the dialog element itself — content clicks hit .about-body
+// only backdrop clicks target the dialog element itself — content clicks hit .about-body.
+// the press must START on the backdrop too, or a text-selection drag that ends out
+// there would close the dialog (click fires on the common ancestor of down+up targets)
+let aboutPressedBackdrop = false;
+aboutModal.addEventListener("pointerdown", e => { aboutPressedBackdrop = e.target === aboutModal; });
 aboutModal.addEventListener("click", e => {
-  if (e.target === aboutModal) aboutModal.close();
+  if (e.target === aboutModal && aboutPressedBackdrop) aboutModal.close();
 });
 
 // ── Init ─────────────────────────────────────────────────────
@@ -957,11 +1250,17 @@ if (typeof PERKS !== "undefined") {
     if (!HEROES.some(h => h.name === name)) console.warn(`Overwatch Slots: perks.js lists unknown hero "${name}" (check heroes.js).`);
   }
 }
+if (typeof CHALLENGES !== "undefined") {
+  for (const name of Object.keys(CHALLENGES.hero || {})) {
+    if (!HEROES.some(h => h.name === name)) console.warn(`Overwatch Slots: challenges.js lists unknown hero "${name}" (check heroes.js).`);
+  }
+}
 
 loadState();
 instantToggle.checked = state.instant;
 portraitToggle.checked = state.portraits;
 perkToggle.checked = state.perks;
+challengeToggle.checked = state.challenges;
 soundToggle.checked = state.sound;
 
 // the hero pool remembers whether you left it open
@@ -972,9 +1271,31 @@ poolDetails.addEventListener("toggle", () => {
   saveState();
 });
 
+// house dares: hero picker grouped by role, and the panel remembers its open state
+for (const role of ROLE_ORDER) {
+  const group = document.createElement("optgroup");
+  group.label = ROLE_LABEL[role];
+  for (const hero of HEROES.filter(h => h.role === role)) {
+    const opt = document.createElement("option");
+    opt.value = hero.name;
+    opt.textContent = hero.name;
+    group.append(opt);
+  }
+  dareHero.append(group);
+}
+refreshDareForm();
+
+const daresDetails = $("dares-details");
+daresDetails.open = state.daresOpen;
+daresDetails.addEventListener("toggle", () => {
+  state.daresOpen = daresDetails.open;
+  saveState();
+});
+
 renderMode();
 renderPlayers();
 renderPool();
+renderDares();
 renderResults(); // shows the empty "pull the lever" state until the first spin
 updateSpinState();
 applySharedHash(false); // arriving via a share link? show that exact team
