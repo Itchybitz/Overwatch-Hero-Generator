@@ -47,6 +47,7 @@ const state = {
   challenges: false,
   sound: true,
   rerolls: true,
+  groupRoles: false, // sort cards Tank → Damage → Support; off = random deal order
   noRepeatTonight: false,
   sessionLog: [], // {t, deals: [{player, role, hero}]} — one entry per spin tonight
   poolOpen: false,
@@ -81,6 +82,7 @@ function saveState() {
       challenges: state.challenges,
       sound: state.sound,
       rerolls: state.rerolls,
+      groupRoles: state.groupRoles,
       noRepeatTonight: state.noRepeatTonight,
       sessionLog: state.sessionLog,
       poolOpen: state.poolOpen,
@@ -129,6 +131,7 @@ function loadState() {
     state.challenges = !!saved.challenges; // default off
     state.sound = saved.sound !== false; // default on
     state.rerolls = saved.rerolls !== false; // default on
+    state.groupRoles = !!saved.groupRoles; // default off — random deal order
     state.noRepeatTonight = !!saved.noRepeatTonight;
     if (Array.isArray(saved.sessionLog)) {
       state.sessionLog = saved.sessionLog
@@ -535,7 +538,7 @@ function updateSpinState() {
   if (problem) spinWarning.textContent = problem;
   // these rewrite the dealt board, so they lock while the reels run
   portraitToggle.disabled = perkToggle.disabled = challengeToggle.disabled =
-    rerollToggle.disabled = state.spinning;
+    rerollToggle.disabled = groupToggle.disabled = state.spinning;
   $("share-link").disabled = $("copy-text").disabled = $("copy-image").disabled =
     state.spinning || !state.results;
 }
@@ -1269,8 +1272,16 @@ async function spin() {
     return result;
   });
 
-  // Display sorted Tank → Damage → Support.
-  results.sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role));
+  // Display sorted Tank → Damage → Support — or dealt out in random order.
+  // (in place: the animated path below iterates this same array for card order)
+  if (state.groupRoles) {
+    results.sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role));
+  } else {
+    for (let i = results.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [results[i], results[j]] = [results[j], results[i]];
+    }
+  }
   // a golden spin crowns one WILD: that player may swap to any hero of their role
   if (state.golden) results[Math.floor(Math.random() * results.length)].wild = true;
   state.results = results;
@@ -1478,6 +1489,19 @@ rerollToggle.addEventListener("change", () => {
   if (state.results) renderResults(); // show/hide the ↻ buttons
 });
 
+const groupToggle = $("group-toggle");
+groupToggle.addEventListener("change", () => {
+  state.groupRoles = groupToggle.checked;
+  saveState();
+  if (!state.results) return;
+  if (state.groupRoles) {
+    state.results.sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role));
+  } else {
+    state.results = shuffle(state.results);
+  }
+  renderResults();
+});
+
 const moreControls = $("more-controls");
 moreControls.addEventListener("click", () => {
   const sec = $("controls-secondary");
@@ -1586,6 +1610,14 @@ addPlayerBtn.addEventListener("click", () => {
 
 $("enable-all").addEventListener("click", () => {
   state.banned.clear();
+  saveState();
+  renderPool();
+  updateSpinState();
+});
+
+// the inverse: wipe the pool, then re-enable a hand-picked roster
+$("disable-all").addEventListener("click", () => {
+  state.banned = new Set(HEROES.map(h => h.name));
   saveState();
   renderPool();
   updateSpinState();
@@ -1710,6 +1742,7 @@ perkToggle.checked = state.perks;
 challengeToggle.checked = state.challenges;
 soundToggle.checked = state.sound;
 rerollToggle.checked = state.rerolls;
+groupToggle.checked = state.groupRoles;
 $("norepeat-toggle").checked = state.noRepeatTonight;
 
 // the hero pool remembers whether you left it open

@@ -75,6 +75,11 @@
             <input type="checkbox" id="reroll-toggle" class="switch-input">
             <span class="switch"></span>
           </label>
+          <label class="control-group toggle-group" title="Sort the cards Tank → Damage → Support. Turn off to deal them out in random order.">
+            <span class="control-label">Group roles</span>
+            <input type="checkbox" id="group-toggle" class="switch-input">
+            <span class="switch"></span>
+          </label>
         </div>
       </section>
 
@@ -98,6 +103,7 @@
           </summary>
           <div class="pool-actions">
             <button id="enable-all" class="btn btn-ghost btn-small">Enable all heroes</button>
+            <button id="disable-all" class="btn btn-ghost btn-small" title="Ban everyone, then re-enable just the heroes you want in the pool">Ban all heroes</button>
           </div>
           <div id="hero-pool" class="hero-pool"></div>
         </details>

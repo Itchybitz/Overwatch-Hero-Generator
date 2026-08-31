@@ -450,7 +450,7 @@ body::before {
 
 .pool-hint { color: var(--text-dim); font-size: 0.78rem; font-style: italic; }
 
-.pool-actions { margin-bottom: 14px; }
+.pool-actions { margin-bottom: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
 
 .hero-pool { display: flex; flex-direction: column; gap: 18px; }
 
