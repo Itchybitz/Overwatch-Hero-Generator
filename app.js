@@ -1675,6 +1675,7 @@ window.addEventListener("hashchange", () => applySharedHash());
 
 const aboutModal = $("about-modal");
 $("about-link").addEventListener("click", () => aboutModal.showModal());
+$("about-top").addEventListener("click", () => aboutModal.showModal());
 $("about-close").addEventListener("click", () => aboutModal.close());
 // only backdrop clicks target the dialog element itself — content clicks hit .about-body.
 // the press must START on the backdrop too, or a text-selection drag that ends out

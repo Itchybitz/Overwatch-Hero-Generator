@@ -1314,6 +1314,20 @@ body::before {
   padding-right: 34px;
 }
 
+/* a long modal scrolls inside its body — never taller than the screen */
+.about-body { max-height: calc(100dvh - 48px); overflow-y: auto; }
+
+.about-subhead {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--orange);
+  margin: 16px 0 8px;
+}
+
 .about-body p { margin-bottom: 12px; line-height: 1.55; }
 .about-body p:last-child { margin-bottom: 0; }
 
