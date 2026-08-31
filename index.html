@@ -69,6 +69,11 @@
             <input type="checkbox" id="instant-toggle" class="switch-input">
             <span class="switch"></span>
           </label>
+          <label class="control-group toggle-group" title="Allow rerolling individual heroes — but a reroll always deals a punishment dare. Turn off for hardcore fate.">
+            <span class="control-label">Rerolls</span>
+            <input type="checkbox" id="reroll-toggle" class="switch-input">
+            <span class="switch"></span>
+          </label>
         </div>
       </section>
 
@@ -126,6 +131,12 @@
           <p id="dares-empty" class="dares-empty">No house dares yet. Write one above — it gets
             shuffled into the deck with the built-in ones and saved in this browser.</p>
           <div id="dare-list" class="dare-list"></div>
+          <div class="setup-share-row">
+            <button id="share-setup" class="btn btn-ghost btn-small" aria-live="polite"
+                    title="Copy a link that hands your whole setup — players, role crosses, bans, and house dares — to a friend">
+              🔗 Share this setup
+            </button>
+          </div>
         </details>
       </section>
 
@@ -140,6 +151,7 @@
           <p id="stale-link-note" class="spin-warning" role="status" hidden>That share link couldn't be replayed — it references heroes that are no longer in the roster.</p>
         </div>
         <p id="shared-note" class="shared-note" hidden>Someone shared this team with you — hit SPIN to roll your own!</p>
+        <div id="golden-note" class="golden-note" hidden>✨ GOLDEN SPIN ✨</div>
         <div id="team-challenge" class="team-challenge" hidden>
           <span class="team-challenge-label" id="team-challenge-label">💥 Team dare</span>
           <span id="team-challenge-text"></span>
@@ -147,9 +159,25 @@
         <div class="share-row" id="share-row" hidden>
           <button id="share-link" class="btn btn-ghost btn-small" aria-live="polite" title="Copy a link that shows this exact team">🔗 Share link</button>
           <button id="copy-text" class="btn btn-ghost btn-small" aria-live="polite" title="Copy the team as text for Discord">📋 Copy as text</button>
+          <button id="copy-image" class="btn btn-ghost btn-small" aria-live="polite" title="Copy the team as a picture for Discord">🖼 Copy as image</button>
         </div>
         <p id="empty-note" class="empty-note">Enter your squad, then push the button.</p>
         <div id="results-grid" class="results-grid"></div>
+
+        <!-- Tonight: every spin this session, plus session-wide no-repeats -->
+        <details id="tonight-details" class="panel tonight" hidden>
+          <summary class="panel-header pool-summary">
+            <h2>Tonight <span class="count-badge" id="tonight-count"></span></h2>
+            <span class="pool-hint">every spin this session</span>
+          </summary>
+          <label class="control-group toggle-group tonight-toggle" title="Nobody rolls a hero they've already played this session (falls back if a role runs out of fresh heroes)">
+            <span class="control-label">No repeats tonight</span>
+            <input type="checkbox" id="norepeat-toggle" class="switch-input">
+            <span class="switch"></span>
+          </label>
+          <div id="tonight-list" class="tonight-list"></div>
+          <button id="tonight-clear" class="btn btn-ghost btn-small">Clear tonight</button>
+        </details>
       </section>
       </div><!-- /layout -->
       <p id="sr-results" class="visually-hidden" role="status" aria-live="polite"></p>

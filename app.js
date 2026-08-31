@@ -23,6 +23,10 @@ const STORAGE_KEY = "ow-slots-v1";
 const MAX_DARE_LEN = 140; // longest built-in dare is ~95 chars
 const MAX_CUSTOM_DARES = 100;
 
+const GOLDEN_CHANCE = 0.05; // ~1 in 20 spins hits the jackpot
+const TONIGHT_TTL = 12 * 60 * 60 * 1000; // a quiet half-day ends the session
+const TONIGHT_MAX = 40; // spins kept in the session log
+
 const ROLE_CSS_COLOR = { tank: "#5aa8f0", damage: "#f0655a", support: "#5ee39a" };
 const heroColor = name =>
   HEROES.find(h => h.name === name)?.color ||
@@ -42,15 +46,23 @@ const state = {
   perks: true,
   challenges: false,
   sound: true,
+  rerolls: true,
+  noRepeatTonight: false,
+  sessionLog: [], // {t, deals: [{player, role, hero}]} — one entry per spin tonight
   poolOpen: false,
   daresOpen: false,
-  results: null, // [{ player, role, hero, perkMinor?, perkMajor?, challenge? }]
+  results: null, // [{ player, role, hero, perkMinor?, perkMajor?, challenge?, punished? }]
   teamChallenge: null, // team-wide dare for the current results
+  golden: false, // this deal was a jackpot spin
   spinning: false,
 };
 
 // The last spin's player → hero deal; a repeat feels rigged even when it's fair.
 let lastSpinHeroes = {};
+
+// The Tonight entry for the board on screen — null when showing a shared link,
+// so rerolls/wild picks on someone else's board never rewrite our own history.
+let currentLogEntry = null;
 
 // ── Persistence ──────────────────────────────────────────────
 
@@ -68,6 +80,9 @@ function saveState() {
       perks: state.perks,
       challenges: state.challenges,
       sound: state.sound,
+      rerolls: state.rerolls,
+      noRepeatTonight: state.noRepeatTonight,
+      sessionLog: state.sessionLog,
       poolOpen: state.poolOpen,
       daresOpen: state.daresOpen,
     }));
@@ -113,6 +128,23 @@ function loadState() {
     state.perks = saved.perks !== false; // default on
     state.challenges = !!saved.challenges; // default off
     state.sound = saved.sound !== false; // default on
+    state.rerolls = saved.rerolls !== false; // default on
+    state.noRepeatTonight = !!saved.noRepeatTonight;
+    if (Array.isArray(saved.sessionLog)) {
+      state.sessionLog = saved.sessionLog
+        .filter(e => e && typeof e.t === "number" && Array.isArray(e.deals))
+        .map(e => ({
+          t: e.t,
+          deals: e.deals
+            .filter(d => d && typeof d.player === "string" && typeof d.hero === "string"
+              && ROLE_ORDER.includes(d.role))
+            .map(d => ({ player: d.player.slice(0, 24), role: d.role, hero: d.hero })),
+        }))
+        .slice(-TONIGHT_MAX);
+      // a quiet half-day ends the session — tomorrow starts fresh
+      const last = state.sessionLog[state.sessionLog.length - 1];
+      if (!last || Date.now() - last.t > TONIGHT_TTL) state.sessionLog = [];
+    }
     state.poolOpen = !!saved.poolOpen;
     state.daresOpen = !!saved.daresOpen;
   } catch { /* corrupted storage — start fresh */ }
@@ -297,6 +329,9 @@ const sfx = {
   heroLock: i => sound(ctx => blip(ctx, { freq: 660 * Math.pow(1.12, i), dur: 0.22, gain: 0.08, type: "triangle" })),
   fanfare: () => sound(ctx =>
     [523, 659, 784, 1047].forEach((f, i) => blip(ctx, { freq: f, dur: 0.18, gain: 0.07, type: "triangle", when: i * 0.09 }))),
+  jackpot: () => sound(ctx =>
+    [523, 659, 784, 1047, 784, 1047, 1319, 1568].forEach((f, i) =>
+      blip(ctx, { freq: f, dur: 0.22, gain: 0.08, type: "triangle", when: i * 0.11 }))),
 };
 
 // ── Rendering ────────────────────────────────────────────────
@@ -499,8 +534,10 @@ function updateSpinState() {
   spinWarning.hidden = !problem;
   if (problem) spinWarning.textContent = problem;
   // these rewrite the dealt board, so they lock while the reels run
-  portraitToggle.disabled = perkToggle.disabled = challengeToggle.disabled = state.spinning;
-  $("share-link").disabled = $("copy-text").disabled = state.spinning || !state.results;
+  portraitToggle.disabled = perkToggle.disabled = challengeToggle.disabled =
+    rerollToggle.disabled = state.spinning;
+  $("share-link").disabled = $("copy-text").disabled = $("copy-image").disabled =
+    state.spinning || !state.results;
 }
 
 function setCardHeroColor(card, heroName) {
@@ -541,6 +578,7 @@ const challengePoolFor = r => [
 
 // Roll (or clear) the challenge dare for one result, in place.
 function rollChallenge(result, exclude = new Set()) {
+  if (result.punished) return; // a punishment dare was earned — it doesn't wash off
   if (!state.challenges) { delete result.challenge; return; }
   const custom = [...customDaresFor("player"), ...customDaresFor(result.role), ...customDaresFor(result.hero)];
   const heroPool = [
@@ -553,23 +591,36 @@ function rollChallenge(result, exclude = new Set()) {
     custom.length && Math.random() < 0.4 ? custom :
     heroPool.length && Math.random() < 0.35 ? heroPool :
     challengePoolFor(result);
-  const fresh = base.filter(c => !exclude.has(c));
-  const pool = fresh.length ? fresh : base;
+  // a small priority pool can run dry mid-spin — widen to the full pool before repeating
+  let pool = base.filter(c => !exclude.has(c));
+  if (!pool.length) pool = challengePoolFor(result).filter(c => !exclude.has(c));
+  if (!pool.length) pool = base;
   if (!pool.length) { delete result.challenge; return; }
   result.challenge = pick(pool);
 }
 
-// A team-wide dare hits on roughly a quarter of spins — jackpot rules.
+// A team-wide dare hits on roughly a quarter of spins — a golden spin guarantees one.
 function rollTeamChallenge() {
   const custom = customDaresFor("team");
   const pool = [
     ...(typeof CHALLENGES !== "undefined" ? CHALLENGES.team || [] : []),
     ...custom,
   ];
+  const chance = state.golden ? 1 : 0.25;
   state.teamChallenge =
-    state.challenges && (state.results?.length || 0) > 1 && pool.length && Math.random() < 0.25
+    state.challenges && (state.results?.length || 0) > 1 && pool.length && Math.random() < chance
       ? (custom.length && Math.random() < 0.5 ? pick(custom) : pick(pool))
       : null;
+}
+
+// The price of rejecting fate: a reroll always deals a dare, toggle or no toggle.
+function rollPunishment(result, exclude = new Set()) {
+  const base = challengePoolFor(result);
+  const fresh = base.filter(c => !exclude.has(c));
+  const pool = fresh.length ? fresh : base;
+  if (!pool.length) return;
+  result.challenge = pick(pool);
+  result.punished = true;
 }
 
 // Roll fresh dares for the whole board (or clear them when the toggle is off).
@@ -590,11 +641,12 @@ function setCardChallenge(card, result) {
   row.className = "challenge-row";
   const custom = isCustomDare(result.challenge);
   const chip = document.createElement("div");
-  chip.className = "challenge-chip" + (custom ? " custom" : "");
-  if (custom) chip.title = "One of your own house dares";
+  chip.className = "challenge-chip" + (result.punished ? " punish" : custom ? " custom" : "");
+  if (result.punished) chip.title = "The price of rerolling fate";
+  else if (custom) chip.title = "One of your own house dares";
   const tag = document.createElement("span");
   tag.className = "perk-tag";
-  tag.textContent = custom ? "🏠 house" : "🎲 dare";
+  tag.textContent = result.punished ? "😈 punishment" : custom ? "🏠 house" : "🎲 dare";
   const text = document.createElement("span");
   text.className = "challenge-text";
   text.textContent = result.challenge;
@@ -603,7 +655,32 @@ function setCardChallenge(card, result) {
   card.append(row);
 }
 
-// Show/hide the team-wide dare banner (kept hidden while reels spin).
+// The golden spin's WILD card: the roll is just a suggestion — that player may
+// play any hero of their role, banned ones included. The wild transcends bans.
+function setCardWild(card, result) {
+  card.querySelector(".wild-row")?.remove();
+  card.classList.toggle("wild", !!result.wild);
+  if (!result.wild) return;
+
+  const row = document.createElement("div");
+  row.className = "wild-row";
+
+  const badge = document.createElement("span");
+  badge.className = "wild-badge";
+  const shimmer = document.createElement("span");
+  shimmer.className = "wild-badge-text"; // the gradient clip would hollow out the emoji
+  shimmer.textContent = "WILD";
+  badge.append("🃏 ", shimmer);
+
+  const text = document.createElement("span");
+  text.className = "wild-text";
+  text.textContent = `pick ANY ${ROLE_LABEL[result.role]} you want — even a banned one`;
+
+  row.append(badge, text);
+  card.append(row);
+}
+
+// Show/hide the team-wide dare banner and golden badge (kept hidden while reels spin).
 function renderTeamChallenge() {
   $("team-challenge").hidden = !state.teamChallenge || !state.results || state.spinning;
   if (state.teamChallenge) {
@@ -611,6 +688,42 @@ function renderTeamChallenge() {
     $("team-challenge-label").textContent =
       isCustomDare(state.teamChallenge) ? "🏠 House rule" : "💥 Team dare";
   }
+  $("golden-note").hidden = !state.golden || !state.results || state.spinning;
+}
+
+// Rebuild the Tonight session log (hidden until the first spin of the session).
+function renderTonight() {
+  const log = state.sessionLog;
+  $("tonight-details").hidden = log.length === 0;
+  $("tonight-count").textContent = log.length ? `${log.length} spin${log.length === 1 ? "" : "s"}` : "";
+  const list = $("tonight-list");
+  list.innerHTML = "";
+  log.forEach((entry, i) => {
+    const row = document.createElement("div");
+    row.className = "tonight-row";
+    const num = document.createElement("span");
+    num.className = "tonight-num";
+    num.textContent = i + 1;
+    const deals = document.createElement("span");
+    deals.className = "tonight-deals";
+    entry.deals.forEach((d, k) => {
+      if (k) deals.append(" · ");
+      const name = document.createElement("b");
+      name.textContent = d.player;
+      deals.append(name, ` → ${d.hero}`);
+    });
+    row.append(num, deals);
+    list.prepend(row); // newest spin on top
+  });
+}
+
+// Heroes each player has already been dealt tonight (for the no-repeats toggle).
+function playedTonight() {
+  const map = {};
+  for (const entry of state.sessionLog) {
+    for (const d of entry.deals) (map[d.player] = map[d.player] || new Set()).add(d.hero);
+  }
+  return map;
 }
 
 // Add/replace the perk chips on a card (removes them if nothing is rolled).
@@ -672,7 +785,7 @@ function setCardPortrait(card, heroName) {
 
 function buildCard(result, index = 0) {
   const card = document.createElement("div");
-  card.className = `result-card ${result.role}`;
+  card.className = `result-card ${result.role}` + (state.golden ? " golden" : "");
   card.style.animationDelay = `${index * 0.06}s`;
   setCardHeroColor(card, result.hero);
 
@@ -701,7 +814,8 @@ function buildCard(result, index = 0) {
   const reroll = document.createElement("button");
   reroll.className = "reroll-btn";
   reroll.textContent = "↻";
-  reroll.title = "Reroll this hero";
+  reroll.hidden = !state.rerolls; // hardcore mode: fate is final
+  reroll.title = "Reroll this hero — costs a punishment dare";
   reroll.setAttribute("aria-label", `Reroll hero for ${result.player}`);
   reroll.addEventListener("click", () => rerollHero(result, card, heroEl));
 
@@ -709,6 +823,7 @@ function buildCard(result, index = 0) {
   setCardPortrait(card, result.hero);
   setCardPerks(card, result);
   setCardChallenge(card, result);
+  setCardWild(card, result);
   return card;
 }
 
@@ -736,7 +851,9 @@ function renderResults() {
 function announceResults(prefix = "Team rolled") {
   if (!state.results) return;
   $("sr-results").textContent = `${prefix}: ` + state.results
-    .map(r => `${r.player}: ${ROLE_LABEL[r.role]}, ${r.hero}` + (r.challenge ? `, dare: ${r.challenge}` : ""))
+    .map(r => `${r.player}: ${ROLE_LABEL[r.role]}, ${r.hero}`
+      + (r.wild ? ` (wild — may pick any ${ROLE_LABEL[r.role]})` : "")
+      + (r.challenge ? `, dare: ${r.challenge}` : ""))
     .join(". ")
     + (state.teamChallenge ? `. Team dare: ${state.teamChallenge}` : "");
 }
@@ -745,6 +862,18 @@ function announceResults(prefix = "Team rolled") {
 
 const ROLE_EMOJI = { tank: "🛡️", damage: "⚔️", support: "💚" };
 const ROLE_FROM_CHAR = { t: "tank", d: "damage", s: "support" };
+
+// URL-safe base64 over UTF-8 — shared by team links and setup links.
+const toB64url = json => {
+  const bytes = new TextEncoder().encode(json);
+  return btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+
+const fromB64url = enc => {
+  const b64 = enc.replace(/-/g, "+").replace(/_/g, "/");
+  return new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+};
 
 // Share links encode perks by NAME so links survive perk-data updates
 // (a renamed perk degrades to "no perk" instead of showing the wrong one).
@@ -756,12 +885,13 @@ function encodeResults() {
     r.perkMinor ? r.perkMinor.name : null,
     r.perkMajor ? r.perkMajor.name : null,
     r.challenge || null,
+    r.punished ? 1 : null,
   ]);
-  // plain rows unless a team dare needs carrying — keeps old-format links symmetrical
-  const json = JSON.stringify(state.teamChallenge ? { r: rows, t: state.teamChallenge } : rows);
-  const bytes = new TextEncoder().encode(json);
-  return btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  // plain rows unless a team dare or jackpot needs carrying — keeps old links symmetrical
+  const extras = {};
+  if (state.teamChallenge) extras.t = state.teamChallenge;
+  if (state.golden) extras.g = 1;
+  return toB64url(JSON.stringify(Object.keys(extras).length ? { r: rows, ...extras } : rows));
 }
 
 // Accepts both the current name-based perk encoding and legacy index-based links.
@@ -773,12 +903,11 @@ function findPerk(list, key) {
 
 function decodeSharedTeam(encoded) {
   try {
-    const b64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
-    const parsed = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))));
+    const parsed = JSON.parse(fromB64url(encoded));
     // legacy links are a bare rows array; newer ones wrap it to carry the team dare
     const rows = Array.isArray(parsed) ? parsed : parsed.r;
     if (!Array.isArray(rows) || rows.length === 0 || rows.length > 6) return null;
-    const results = rows.map(([player, roleChar, hero, mi, ma, dare]) => {
+    const results = rows.map(([player, roleChar, hero, mi, ma, dare, pun]) => {
       const role = ROLE_FROM_CHAR[roleChar];
       if (!role || !HEROES.some(h => h.name === hero && h.role === role)) throw new Error("bad hero");
       const result = { player: String(player).slice(0, 24) || "Player", role, hero };
@@ -795,6 +924,7 @@ function decodeSharedTeam(encoded) {
       // any dare text rides along — house dares aren't in the recipient's pools
       if (typeof dare === "string" && dare.trim()) {
         result.challenge = dare.trim().slice(0, MAX_DARE_LEN);
+        if (pun === 1) result.punished = true;
       }
       return result;
     });
@@ -803,7 +933,8 @@ function decodeSharedTeam(encoded) {
       && parsed.t.trim()
       && results.length > 1
       ? parsed.t.trim().slice(0, MAX_DARE_LEN) : null;
-    return { results, team };
+    const golden = !Array.isArray(parsed) && parsed.g === 1;
+    return { results, team, golden };
   } catch {
     return null;
   }
@@ -823,13 +954,161 @@ function shareUrl() {
 function resultsAsText() {
   const lines = state.results.map(r => {
     const perks = r.perkMinor && r.perkMajor ? ` (${r.perkMinor.name} / ${r.perkMajor.name})` : "";
-    const dare = r.challenge ? `\n   ${isCustomDare(r.challenge) ? "🏠" : "🎲"} ${r.challenge}` : "";
-    return `${ROLE_EMOJI[r.role]} ${r.player} → ${r.hero}${perks}${dare}`;
+    const tag = r.punished ? "😈" : r.challenge && isCustomDare(r.challenge) ? "🏠" : "🎲";
+    const dare = r.challenge ? `\n   ${tag} ${r.challenge}` : "";
+    return `${ROLE_EMOJI[r.role]} ${r.player} → ${r.hero}${r.wild ? " 🃏" : ""}${perks}${dare}`;
   });
   const team = state.teamChallenge
     ? `\n${isCustomDare(state.teamChallenge) ? "🏠 House rule" : "💥 Team dare"}: ${state.teamChallenge}`
     : "";
-  return `🎰 OVERWATCH SLOTS — ${MODE_LABEL[state.mode] || state.mode}\n${lines.join("\n")}${team}\nSpin your own: ${shareUrl()}`;
+  const golden = state.golden ? " · ✨ GOLDEN SPIN" : "";
+  return `🎰 OVERWATCH SLOTS — ${MODE_LABEL[state.mode] || state.mode}${golden}\n${lines.join("\n")}${team}\nSpin your own: ${shareUrl()}`;
+}
+
+// ── Copy as image ────────────────────────────────────────────
+
+// Word-wrap: the lines `text` needs at `maxWidth` in the context's current font.
+function wrapText(ctx, text, maxWidth) {
+  const lines = [];
+  let line = "";
+  for (let w of text.split(" ")) {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width <= maxWidth) { line = test; continue; }
+    if (line) { lines.push(line); line = ""; }
+    // a single unbroken word wider than the card gets hard-split by characters
+    while (ctx.measureText(w).width > maxWidth && w.length > 1) {
+      let cut = w.length - 1;
+      while (cut > 1 && ctx.measureText(w.slice(0, cut)).width > maxWidth) cut--;
+      lines.push(w.slice(0, cut));
+      w = w.slice(cut);
+    }
+    line = w;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+// Draw the current team onto a canvas. No CDN portraits — cross-origin images
+// would taint the canvas and block export, so cards are text-and-color only.
+function teamImage() {
+  const W = 760, PAD = 26, SCALE = 2;
+  const INNER = W - PAD * 2;
+  const display = "800 19px Bahnschrift, 'Arial Narrow', sans-serif";
+  const body = "15px 'Segoe UI', sans-serif";
+
+  // measure pass: card heights depend on how the dare text wraps
+  const meas = document.createElement("canvas").getContext("2d");
+  meas.font = body;
+  const cards = state.results.map(r => {
+    const dareLines = r.challenge ? wrapText(meas, r.challenge, INNER - 130) : [];
+    const h = 74 + (r.perkMinor && r.perkMajor ? 24 : 0) + (dareLines.length ? 10 + dareLines.length * 21 : 0);
+    return { r, dareLines, h };
+  });
+  const teamLines = state.teamChallenge ? wrapText(meas, state.teamChallenge, INNER - 44) : [];
+  let y = 66;
+  if (state.golden) y += 34;
+  const teamBoxH = teamLines.length ? 34 + teamLines.length * 21 : 0;
+  if (teamBoxH) y += teamBoxH + 14;
+  const H = y + cards.reduce((s, c) => s + c.h + 12, 0) + 40;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W * SCALE;
+  canvas.height = H * SCALE;
+  const x = canvas.getContext("2d");
+  x.scale(SCALE, SCALE);
+
+  // backdrop
+  x.fillStyle = "#0c101a";
+  x.fillRect(0, 0, W, H);
+  const glow = x.createRadialGradient(W / 2, -60, 0, W / 2, -60, 420);
+  glow.addColorStop(0, "rgba(249,158,26,0.20)");
+  glow.addColorStop(1, "rgba(249,158,26,0)");
+  x.fillStyle = glow;
+  x.fillRect(0, 0, W, H);
+
+  // header
+  x.textAlign = "center";
+  x.font = "italic 800 24px Bahnschrift, 'Arial Narrow', sans-serif";
+  x.fillStyle = "#eef2f9";
+  x.fillText(`🎰 OVERWATCH SLOTS — ${MODE_LABEL[state.mode] || state.mode}`, W / 2, 38);
+  let cy = 66;
+  if (state.golden) {
+    x.font = "italic 800 17px Bahnschrift, 'Arial Narrow', sans-serif";
+    x.fillStyle = "#f5d675";
+    x.fillText("✨ G O L D E N   S P I N ✨", W / 2, cy - 6);
+    cy += 34 - 6;
+  }
+
+  const roundRect = (rx, ry, rw, rh, rad) => {
+    x.beginPath();
+    x.roundRect(rx, ry, rw, rh, rad);
+  };
+
+  // team dare banner
+  if (teamBoxH) {
+    x.strokeStyle = "rgba(249,158,26,0.55)";
+    x.setLineDash([5, 4]);
+    x.fillStyle = "rgba(249,158,26,0.08)";
+    roundRect(PAD, cy - 14, INNER, teamBoxH, 9);
+    x.fill();
+    x.stroke();
+    x.setLineDash([]);
+    x.font = "italic 800 12px Bahnschrift, 'Arial Narrow', sans-serif";
+    x.fillStyle = "#f99e1a";
+    x.fillText(isCustomDare(state.teamChallenge) ? "🏠 HOUSE RULE" : "💥 TEAM DARE", W / 2, cy + 6);
+    x.font = body;
+    x.fillStyle = "#eef2f9";
+    teamLines.forEach((l, i) => x.fillText(l, W / 2, cy + 27 + i * 21));
+    cy += teamBoxH + 14;
+  }
+
+  // cards
+  x.textAlign = "left";
+  for (const { r, dareLines, h } of cards) {
+    x.fillStyle = "#1a2130";
+    x.strokeStyle = state.golden ? "rgba(245,214,117,0.65)" : "#2e3950";
+    roundRect(PAD, cy, INNER, h, 10);
+    x.fill();
+    x.stroke();
+    const rc = ROLE_CSS_COLOR[r.role];
+    x.fillStyle = rc;
+    x.fillRect(PAD, cy + 8, 4, h - 16);
+
+    x.font = "700 11px 'Segoe UI', sans-serif";
+    x.fillStyle = rc;
+    x.fillText(ROLE_LABEL[r.role].toUpperCase(), PAD + 18, cy + 24);
+
+    x.font = display;
+    x.fillStyle = "#eef2f9";
+    x.fillText(r.player, PAD + 18, cy + 50);
+    x.textAlign = "right";
+    x.font = "italic 800 20px Bahnschrift, 'Arial Narrow', sans-serif";
+    x.fillStyle = heroColor(r.hero);
+    x.fillText((r.wild ? "🃏 " : "") + r.hero, W - PAD - 18, cy + 44);
+    x.textAlign = "left";
+
+    let ly = cy + 74;
+    if (r.perkMinor && r.perkMajor) {
+      x.font = "13px 'Segoe UI', sans-serif";
+      x.fillStyle = "#8a94ab";
+      x.fillText(`MINOR ${r.perkMinor.name}   ·   MAJOR ${r.perkMajor.name}`, PAD + 18, ly - 4);
+      ly += 24;
+    }
+    if (dareLines.length) {
+      x.font = body;
+      x.fillStyle = r.punished ? "#f0655a" : "#ffb84d";
+      const tag = r.punished ? "😈" : isCustomDare(r.challenge) ? "🏠" : "🎲";
+      dareLines.forEach((l, i) => x.fillText(`${i === 0 ? tag + " " : "    "}${l}`, PAD + 18, ly + i * 21));
+    }
+    cy += h + 12;
+  }
+
+  // footer
+  x.textAlign = "center";
+  x.font = "700 13px Bahnschrift, 'Arial Narrow', sans-serif";
+  x.fillStyle = "#f99e1a";
+  x.fillText("owherogenerator.com", W / 2, H - 16);
+  return canvas;
 }
 
 async function copyToClipboard(text) {
@@ -855,18 +1134,99 @@ function flashButton(btn, ok) {
   btn.dataset.label = original;
   btn.textContent = ok ? "✓ Copied!" : "✗ Couldn't copy";
   btn.disabled = true;
-  setTimeout(() => { btn.textContent = original; btn.disabled = state.spinning || !state.results; }, 1400);
+  // updateSpinState reasserts the disabled state for the buttons it manages
+  setTimeout(() => { btn.textContent = original; btn.disabled = false; updateSpinState(); }, 1400);
+}
+
+// ── Setup sharing (#setup= links hand your whole config to a friend) ──
+
+function encodeSetup() {
+  return toB64url(JSON.stringify({
+    v: 1,
+    m: state.mode,
+    p: state.players,
+    x: state.playerBans,
+    b: [...state.banned],
+    d: state.customDares,
+  }));
+}
+
+function decodeSetup(encoded) {
+  try {
+    const s = JSON.parse(fromB64url(encoded));
+    // Object.hasOwn: a crafted mode like "constructor" is truthy on any plain object
+    if (!s || s.v !== 1 || !Object.hasOwn(COMPS, s.m) || !Array.isArray(s.p)) return null;
+    const heroNames = new Set(HEROES.map(h => h.name));
+    const players = s.p.slice(0, MODE_SIZE[s.m]).map(p => String(p).slice(0, 24));
+    if (players.length === 0) return null;
+    const playerBans = players.map((_, i) =>
+      Array.isArray(s.x?.[i]) ? [...new Set(s.x[i].filter(r => ROLE_ORDER.includes(r)))] : []);
+    const banned = Array.isArray(s.b) ? [...new Set(s.b.filter(n => heroNames.has(n)))] : [];
+    const validTarget = t =>
+      t === "player" || t === "team" || ROLE_ORDER.includes(t) || heroNames.has(t);
+    const seen = new Set();
+    const dares = (Array.isArray(s.d) ? s.d : [])
+      .filter(d => d && typeof d.text === "string" && d.text.trim() && validTarget(d.target))
+      .map(d => ({ text: d.text.trim().slice(0, MAX_DARE_LEN), target: d.target }))
+      .filter(d => {
+        const key = d.target + "\n" + d.text.toLowerCase();
+        if (seen.has(key)) return false; // a payload full of copies is still one dare
+        seen.add(key);
+        return true;
+      })
+      .slice(0, MAX_CUSTOM_DARES);
+    return { mode: s.m, players, playerBans, banned, dares };
+  } catch {
+    return null;
+  }
+}
+
+// Import a #setup= link: replaces squad config, merges house dares — with consent.
+function applySharedSetup(encoded) {
+  const clearHash = () => {
+    try { history.replaceState(null, "", location.pathname + location.search); } catch { /* file:// quirks */ }
+  };
+  const setup = decodeSetup(encoded);
+  if (!setup) { $("stale-link-note").hidden = false; return; }
+  const newDares = setup.dares.filter(d =>
+    !state.customDares.some(o => o.target === d.target && o.text.toLowerCase() === d.text.toLowerCase()));
+  const summary = [
+    `${setup.players.length} player${setup.players.length === 1 ? "" : "s"} (${MODE_LABEL[setup.mode]})`,
+    `${setup.banned.length} hero ban${setup.banned.length === 1 ? "" : "s"}`,
+    `${newDares.length} new house dare${newDares.length === 1 ? "" : "s"}`,
+  ].join(", ");
+  if (!confirm(`Import this shared setup? ${summary}.\n\nPlayers, role crosses, and bans are replaced; house dares are added to yours.`)) {
+    clearHash();
+    return;
+  }
+  state.mode = setup.mode;
+  state.players = setup.players;
+  state.playerBans = setup.playerBans;
+  state.benched = [];
+  state.banned = new Set(setup.banned);
+  state.customDares = state.customDares.concat(newDares).slice(0, MAX_CUSTOM_DARES);
+  saveState();
+  renderMode();
+  renderPlayers();
+  renderPool();
+  renderDares();
+  updateSpinState();
+  clearHash();
 }
 
 // Load (or clear) a shared team from the current #team= hash.
 function applySharedHash(announce = true) {
   $("stale-link-note").hidden = true;
+  const setupMatch = location.hash.match(/^#setup=([A-Za-z0-9_-]+)$/);
+  if (setupMatch) { applySharedSetup(setupMatch[1]); return; }
   const m = location.hash.match(/^#team=([A-Za-z0-9_-]+)$/);
   if (!m) return;
   const shared = decodeSharedTeam(m[1]);
   if (shared) {
     state.results = shared.results;
     state.teamChallenge = shared.team;
+    state.golden = shared.golden;
+    currentLogEntry = null; // someone else's board — not part of our Tonight
     renderResults();
     $("shared-note").hidden = false;
     if (announce) announceResults("Shared team");
@@ -885,16 +1245,22 @@ async function spin() {
   const roles = drawAssignment();
   if (!roles) { updateSpinState(); return; }
 
+  state.golden = Math.random() < GOLDEN_CHANCE;
+
   // Draw a unique hero for each assigned role.
   const taken = new Set();
   const takenDares = new Set();
+  const tonight = state.noRepeatTonight ? playedTonight() : {};
   const results = state.players.map((_, i) => {
     const role = roles[i];
     const label = playerLabel(i);
     const options = availableHeroes(role).filter(h => !taken.has(h.name));
-    // skip whoever this player rolled last spin, as long as an alternative exists
-    const fresh = options.filter(h => h.name !== lastSpinHeroes[label]);
-    const hero = pick(fresh.length ? fresh : options);
+    // skip everything this player already played tonight, then last spin's hero;
+    // fall back a tier whenever a filter would empty the pool
+    const noTonight = options.filter(h => !tonight[label]?.has(h.name));
+    const pool = noTonight.length ? noTonight : options;
+    const fresh = pool.filter(h => h.name !== lastSpinHeroes[label]);
+    const hero = pick(fresh.length ? fresh : pool);
     taken.add(hero.name);
     const result = { player: label, role, hero: hero.name };
     rollPerks(result);
@@ -905,8 +1271,17 @@ async function spin() {
 
   // Display sorted Tank → Damage → Support.
   results.sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role));
+  // a golden spin crowns one WILD: that player may swap to any hero of their role
+  if (state.golden) results[Math.floor(Math.random() * results.length)].wild = true;
   state.results = results;
   lastSpinHeroes = Object.fromEntries(results.map(r => [r.player, r.hero]));
+  state.sessionLog.push({
+    t: Date.now(),
+    deals: results.map(({ player, role, hero }) => ({ player, role, hero })),
+  });
+  state.sessionLog = state.sessionLog.slice(-TONIGHT_MAX);
+  currentLogEntry = state.sessionLog[state.sessionLog.length - 1];
+  saveState();
   rollTeamChallenge();
   $("shared-note").hidden = true; // it's your own team now
   $("stale-link-note").hidden = true;
@@ -917,8 +1292,9 @@ async function spin() {
 
   if (state.instant || REDUCED_MOTION.matches) {
     renderResults();
+    renderTonight();
     revealResults();
-    announceResults();
+    announceResults(state.golden ? "Golden spin! Team rolled" : "Team rolled");
     return;
   }
 
@@ -965,8 +1341,8 @@ async function spin() {
     const result = results[i];
     const heroEl = card.querySelector(".result-hero");
 
-    // Stage 1: lock the role reel.
-    await delay(i === 0 ? 900 : 500);
+    // Stage 1: lock the role reel (golden spins draw out the suspense).
+    await delay((i === 0 ? 900 : 500) * (state.golden ? 1.6 : 1));
     clearInterval(timers[i].role);
     setCardRole(card, result.role);
     card.classList.add("role-locked");
@@ -978,7 +1354,7 @@ async function spin() {
     timers[i].hero = setInterval(() => { heroEl.textContent = pick(pool).name; }, 65);
 
     // Stage 2: lock the hero reel.
-    await delay(550);
+    await delay(550 * (state.golden ? 1.6 : 1));
     clearInterval(timers[i].hero);
     card.classList.remove("spinning");
     card.classList.add("locked");
@@ -990,17 +1366,24 @@ async function spin() {
   state.spinning = false;
   updateSpinState();
   renderTeamChallenge(); // the team dare lands with the fanfare
+  renderTonight(); // and only now does the log show it — no reading ahead of the reels
   // rerolls unlock only once the whole team is revealed
   cards.forEach(c => { c.querySelector(".reroll-btn").disabled = false; });
-  sfx.fanfare();
-  announceResults();
+  state.golden ? sfx.jackpot() : sfx.fanfare();
+  announceResults(state.golden ? "Golden spin! Team rolled" : "Team rolled");
 }
 
 async function rerollHero(result, card, heroEl) {
-  if (state.spinning) return;
+  if (state.spinning || !state.rerolls) return;
 
   const taken = new Set(state.results.map(r => r.hero));
-  const options = availableHeroes(result.role).filter(h => !taken.has(h.name));
+  let options = availableHeroes(result.role).filter(h => !taken.has(h.name));
+  // the no-repeats-tonight promise holds through rerolls too (with the same fallback)
+  if (state.noRepeatTonight) {
+    const played = playedTonight()[result.player];
+    const fresh = options.filter(h => !played?.has(h.name));
+    if (fresh.length) options = fresh;
+  }
 
   if (options.length === 0) {
     card.classList.remove("shake");
@@ -1034,11 +1417,16 @@ async function rerollHero(result, card, heroEl) {
   }
 
   result.hero = newHero;
-  lastSpinHeroes[result.player] = newHero; // next spin avoids the hero they kept
+  // continuity applies only to our own spins — a shared board isn't our history
+  if (currentLogEntry) {
+    lastSpinHeroes[result.player] = newHero; // next spin avoids the hero they kept
+    const deal = currentLogEntry.deals.find(d => d.player === result.player);
+    if (deal) { deal.hero = newHero; saveState(); renderTonight(); }
+  }
   rollPerks(result);
-  // a fresh dare too — excluding everyone's current ones so it visibly changes
+  // rejecting fate has a price: a punishment dare, dares toggle or not
   const takenDares = new Set(state.results.map(r => r.challenge).filter(Boolean));
-  rollChallenge(result, takenDares);
+  rollPunishment(result, takenDares);
   card.classList.remove("spinning");
   void card.offsetWidth;
   card.classList.add("locked");
@@ -1081,6 +1469,13 @@ modeToggle.addEventListener("click", e => {
 instantToggle.addEventListener("change", () => {
   state.instant = instantToggle.checked;
   saveState();
+});
+
+const rerollToggle = $("reroll-toggle");
+rerollToggle.addEventListener("change", () => {
+  state.rerolls = rerollToggle.checked;
+  saveState();
+  if (state.results) renderResults(); // show/hide the ↻ buttons
 });
 
 const moreControls = $("more-controls");
@@ -1223,6 +1618,57 @@ $("copy-text").addEventListener("click", async e => {
   flashButton(btn, await copyToClipboard(resultsAsText()));
 });
 
+$("copy-image").addEventListener("click", async e => {
+  if (!state.results || state.spinning) return;
+  const btn = e.currentTarget;
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const canvas = teamImage();
+    // hand ClipboardItem the promise synchronously — Safari refuses writes that
+    // start after an await has consumed the click's transient activation
+    const blobPromise = new Promise(res => canvas.toBlob(res, "image/png"));
+    let copied = false;
+    if (navigator.clipboard?.write && window.ClipboardItem) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blobPromise })]);
+        copied = true;
+      } catch { /* refused (permissions, focus) — fall through to the download */ }
+    }
+    if (!copied) {
+      const blob = await blobPromise;
+      if (!blob) throw new Error("no blob");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "overwatch-slots-team.png";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+    flashButton(btn, true);
+  } catch {
+    flashButton(btn, false);
+  }
+});
+
+$("share-setup").addEventListener("click", async e => {
+  const btn = e.currentTarget;
+  if (btn.disabled) return;
+  btn.disabled = true;
+  flashButton(btn, await copyToClipboard(siteBase() + "#setup=" + encodeSetup()));
+});
+
+$("norepeat-toggle").addEventListener("change", e => {
+  state.noRepeatTonight = e.currentTarget.checked;
+  saveState();
+});
+
+$("tonight-clear").addEventListener("click", () => {
+  state.sessionLog = [];
+  currentLogEntry = null;
+  saveState();
+  renderTonight();
+});
+
 window.addEventListener("hashchange", () => applySharedHash());
 
 // ── About modal ──────────────────────────────────────────────
@@ -1262,6 +1708,8 @@ portraitToggle.checked = state.portraits;
 perkToggle.checked = state.perks;
 challengeToggle.checked = state.challenges;
 soundToggle.checked = state.sound;
+rerollToggle.checked = state.rerolls;
+$("norepeat-toggle").checked = state.noRepeatTonight;
 
 // the hero pool remembers whether you left it open
 const poolDetails = $("pool-details");
@@ -1296,6 +1744,7 @@ renderMode();
 renderPlayers();
 renderPool();
 renderDares();
+renderTonight();
 renderResults(); // shows the empty "pull the lever" state until the first spin
 updateSpinState();
 applySharedHash(false); // arriving via a share link? show that exact team
