@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overwatch Slots</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎰</text></svg>">
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <h1 class="title">OVERWATCH <span class="title-accent">SLOTS</span></h1>
+      <p class="tagline">Spin the wheel. Play what fate gives you.</p>
+    </header>
+
+    <main>
+      <div class="layout">
+      <div class="setup-col">
+      <!-- Mode + options -->
+      <section class="panel controls-panel">
+        <div class="controls-row">
+          <div class="control-group">
+            <span class="control-label">Mode</span>
+            <div class="segmented" id="mode-toggle">
+              <button class="seg-btn" data-mode="5v5">5v5 <small>1-2-2</small></button>
+              <button class="seg-btn" data-mode="6v6">6v6 <small>2-2-2</small></button>
+            </div>
+          </div>
+          <label class="control-group toggle-group" title="Show hero portraits on the result cards">
+            <span class="control-label">Portraits</span>
+            <input type="checkbox" id="portrait-toggle" class="switch-input">
+            <span class="switch"></span>
+          </label>
+          <label class="control-group toggle-group" title="Also roll which minor and major perk each player takes">
+            <span class="control-label">Perks</span>
+            <input type="checkbox" id="perk-toggle" class="switch-input">
+            <span class="switch"></span>
+          </label>
+          <label class="control-group toggle-group" title="Slot-machine sound effects">
+            <span class="control-label">Sound</span>
+            <input type="checkbox" id="sound-toggle" class="switch-input">
+            <span class="switch"></span>
+          </label>
+          <label class="control-group toggle-group" title="Skip the slot animation">
+            <span class="control-label">Instant results</span>
+            <input type="checkbox" id="instant-toggle" class="switch-input">
+            <span class="switch"></span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Players -->
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Players <span class="count-badge" id="player-count"></span></h2>
+          <span class="pool-hint">cross out a role icon so that player never rolls it</span>
+        </div>
+        <div id="player-list" class="player-list"></div>
+        <button id="add-player" class="btn btn-ghost">+ Add player</button>
+      </section>
+
+      <!-- Hero pool -->
+      <section class="panel">
+        <details id="pool-details">
+          <summary class="panel-header pool-summary">
+            <h2>Hero Pool <span class="count-badge" id="pool-count"></span></h2>
+            <span class="pool-hint">click heroes to ban them from the wheel</span>
+          </summary>
+          <div class="pool-actions">
+            <button id="enable-all" class="btn btn-ghost btn-small">Enable all heroes</button>
+          </div>
+          <div id="hero-pool" class="hero-pool"></div>
+        </details>
+      </section>
+
+      </div><!-- /setup-col -->
+
+      <!-- Results: the slot machine — spin button + team -->
+      <section id="results" class="results" aria-labelledby="results-title">
+        <h2 class="results-title" id="results-title">YOUR TEAM</h2>
+        <div class="spin-area">
+          <button id="spin-btn" class="btn btn-spin">SPIN</button>
+          <p id="spin-warning" class="spin-warning" role="status" hidden></p>
+          <p id="stale-link-note" class="spin-warning" role="status" hidden>That share link couldn't be replayed — it references heroes that are no longer in the roster.</p>
+        </div>
+        <p id="shared-note" class="shared-note" hidden>Someone shared this team with you — hit SPIN to roll your own!</p>
+        <div class="share-row" id="share-row" hidden>
+          <button id="share-link" class="btn btn-ghost btn-small" aria-live="polite" title="Copy a link that shows this exact team">🔗 Share link</button>
+          <button id="copy-text" class="btn btn-ghost btn-small" aria-live="polite" title="Copy the team as text for Discord">📋 Copy as text</button>
+        </div>
+        <p id="empty-note" class="empty-note">Enter your squad, then push the button.</p>
+        <div id="results-grid" class="results-grid"></div>
+      </section>
+      </div><!-- /layout -->
+      <p id="sr-results" class="visually-hidden" role="status" aria-live="polite"></p>
+    </main>
+
+    <footer class="footer">
+      Fan-made randomizer · not affiliated with Blizzard
+    </footer>
+  </div>
+
+  <script src="heroes.js"></script>
+  <script src="perks.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
