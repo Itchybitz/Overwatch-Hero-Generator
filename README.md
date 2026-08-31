@@ -4,7 +4,7 @@
 
 A fan-made team roulette for Overwatch — enter your group's names, hit **SPIN**, and every player gets a random role and hero dealt slot-machine style, always in a legal team comp.
 
-**▶ Play it here:**
+**▶ Play it here: www.owherogenerator.com**
 
 ## What it does
 
