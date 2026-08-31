@@ -683,7 +683,7 @@ function setCardWild(card, result) {
   card.append(row);
 }
 
-// Show/hide the team-wide dare banner and golden badge (kept hidden while reels spin).
+// Show/hide the team banners and golden badge (kept hidden while reels spin).
 function renderTeamChallenge() {
   $("team-challenge").hidden = !state.teamChallenge || !state.results || state.spinning;
   if (state.teamChallenge) {
@@ -1004,7 +1004,8 @@ function teamImage() {
   meas.font = body;
   const cards = state.results.map(r => {
     const dareLines = r.challenge ? wrapText(meas, r.challenge, INNER - 130) : [];
-    const h = 74 + (r.perkMinor && r.perkMajor ? 24 : 0) + (dareLines.length ? 10 + dareLines.length * 21 : 0);
+    const h = 74 + (r.perkMinor && r.perkMajor ? 24 : 0)
+      + (dareLines.length ? 10 + dareLines.length * 21 : 0);
     return { r, dareLines, h };
   });
   const teamLines = state.teamChallenge ? wrapText(meas, state.teamChallenge, INNER - 44) : [];
@@ -1347,13 +1348,20 @@ async function spin() {
 
   const ticker = setInterval(sfx.tick, 90);
 
-  for (let i = 0; i < cards.length; i++) {
+  // On golden spins the WILD card locks last, wherever it sits — the headliner
+  // closes the show. (Stable sort: everyone else keeps their normal order.)
+  const lockOrder = results.map((_, i) => i)
+    .sort((a, b) => (results[a].wild ? 1 : 0) - (results[b].wild ? 1 : 0));
+
+  for (let k = 0; k < lockOrder.length; k++) {
+    const i = lockOrder[k];
     const card = cards[i];
     const result = results[i];
     const heroEl = card.querySelector(".result-hero");
 
-    // Stage 1: lock the role reel (golden spins draw out the suspense).
-    await delay((i === 0 ? 900 : 500) * (state.golden ? 1.6 : 1));
+    // Stage 1: lock the role reel (golden spins draw out the suspense,
+    // and the wild's final reveal gets an extra-long beat).
+    await delay((k === 0 ? 900 : result.wild ? 1300 : 500) * (state.golden ? 1.6 : 1));
     clearInterval(timers[i].role);
     setCardRole(card, result.role);
     card.classList.add("role-locked");
@@ -1370,7 +1378,7 @@ async function spin() {
     card.classList.remove("spinning");
     card.classList.add("locked");
     heroEl.textContent = result.hero;
-    sfx.heroLock(i);
+    sfx.heroLock(k); // pitch climbs with lock order — the wild gets the top note
   }
 
   clearInterval(ticker);

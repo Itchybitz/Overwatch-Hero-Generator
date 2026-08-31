@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -15,7 +15,8 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#0c101a">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css">
+  <!-- ?v= busts browser caches on deploy — bump it whenever these files change -->
+  <link rel="stylesheet" href="styles.css?v=5">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎰</text></svg>">
 </head>
 <body>
@@ -232,9 +233,9 @@
     </div>
   </dialog>
 
-  <script src="heroes.js"></script>
-  <script src="perks.js"></script>
-  <script src="challenges.js"></script>
-  <script src="app.js"></script>
+  <script src="heroes.js?v=5"></script>
+  <script src="perks.js?v=5"></script>
+  <script src="challenges.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
