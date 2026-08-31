@@ -1,5 +1,6 @@
 # 🎰 Overwatch Slots
-<img width="2094" height="1184" alt="image" src="https://github.com/user-attachments/assets/2bcc9484-bbf2-4ab2-8159-38cf5580f35c" />
+<img width="2536" height="1240" alt="image" src="https://github.com/user-attachments/assets/d01514d0-7373-4761-91ae-4a3f4961da94" />
+
 
 
 
