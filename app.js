@@ -912,6 +912,16 @@ $("copy-text").addEventListener("click", async e => {
 
 window.addEventListener("hashchange", () => applySharedHash());
 
+// ── About modal ──────────────────────────────────────────────
+
+const aboutModal = $("about-modal");
+$("about-link").addEventListener("click", () => aboutModal.showModal());
+$("about-close").addEventListener("click", () => aboutModal.close());
+// only backdrop clicks target the dialog element itself — content clicks hit .about-body
+aboutModal.addEventListener("click", e => {
+  if (e.target === aboutModal) aboutModal.close();
+});
+
 // ── Init ─────────────────────────────────────────────────────
 
 // Surface roster/perk data drift for whoever edits heroes.js by hand.

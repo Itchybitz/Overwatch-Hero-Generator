@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Overwatch Slots</title>
+  <meta name="description" content="Fan-made team randomizer for Overwatch. Enter your squad, spin the slots, and play what fate gives you — roles, heroes, and perks for 5v5 or 6v6.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://owherogenerator.com/">
+  <meta property="og:title" content="Overwatch Slots">
+  <meta property="og:description" content="Spin the wheel. Play what fate gives you. A fan-made hero randomizer for your Overwatch squad.">
+  <meta name="twitter:card" content="summary">
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎰</text></svg>">
 </head>
@@ -97,9 +103,40 @@
     </main>
 
     <footer class="footer">
-      Fan-made randomizer · not affiliated with Blizzard
+      Fan-made randomizer · not affiliated with Blizzard ·
+      <button id="about-link" class="footer-link">About</button>
     </footer>
   </div>
+
+  <dialog id="about-modal" class="about-modal" aria-labelledby="about-title">
+    <div class="about-body">
+      <button id="about-close" class="about-close" aria-label="Close about dialog">✕</button>
+      <h2 id="about-title" class="about-title">About <span class="title-accent">Overwatch Slots</span></h2>
+      <p>
+        Overwatch Slots started as a side project for my friends and me — a way to
+        settle who plays what in Overwatch without the argument. They asked me
+        to publish it, so here we are.
+      </p>
+      <p>
+        Enter your squad, hit <strong>SPIN</strong>, and the slots deal every player
+        a role and a hero. No more fighting over who has to tank.
+      </p>
+      <ul class="about-list">
+        <li>5v5 (1&#8209;2&#8209;2) and 6v6 (2&#8209;2&#8209;2) team comps</li>
+        <li>Cross out roles per player, or ban heroes from the pool entirely</li>
+        <li>Roll minor and major perks, reroll individual players, and share the team with one link</li>
+      </ul>
+      <p>
+        Found a bug or have an idea? Open an issue on
+        <a href="https://github.com/Itchybitz/Overwatch-Hero-Generator" target="_blank" rel="noopener">GitHub</a>.
+      </p>
+      <p class="about-fineprint">
+        This is an unofficial fan project. It is not affiliated with, endorsed by, or
+        sponsored by Blizzard Entertainment. Overwatch and all hero names are trademarks
+        of Blizzard Entertainment,&nbsp;Inc.
+      </p>
+    </div>
+  </dialog>
 
   <script src="heroes.js"></script>
   <script src="perks.js"></script>

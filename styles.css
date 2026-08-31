@@ -874,6 +874,106 @@ body {
   border-radius: 4px;
 }
 
+.footer-link {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s;
+}
+
+.footer-link:hover { color: var(--orange); }
+
+/* ── About modal ── */
+.about-modal {
+  /* the universal reset zeroes margins, which breaks the UA's dialog centering */
+  margin: auto;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, var(--bg-panel-2), #1a2130 65%);
+  color: var(--text);
+  max-width: 520px;
+  width: calc(100vw - 40px);
+  padding: 0;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.about-modal::backdrop {
+  background: rgba(5, 8, 14, 0.7);
+  backdrop-filter: blur(3px);
+}
+
+/* padding lives on the inner wrapper so backdrop clicks are the only
+   ones that land on the dialog element itself (see app.js) */
+.about-body {
+  padding: 26px 28px 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.about-body::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(249, 158, 26, 0.55) 30%, rgba(249, 158, 26, 0.55) 70%, transparent);
+  opacity: 0.6;
+}
+
+.about-title {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 800;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 14px;
+  padding-right: 34px;
+}
+
+.about-body p { margin-bottom: 12px; line-height: 1.55; }
+.about-body p:last-child { margin-bottom: 0; }
+
+.about-body a { color: var(--orange); text-underline-offset: 3px; }
+.about-body a:hover { color: var(--orange-bright); }
+
+.about-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  line-height: 1.55;
+}
+
+.about-list li { margin-bottom: 5px; }
+.about-list li::marker { color: var(--orange); }
+
+.about-fineprint {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 16px;
+}
+
+.about-close {
+  position: absolute;
+  top: 14px; right: 14px;
+  appearance: none;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 8px;
+  width: 30px; height: 30px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.about-close:hover { color: var(--orange); border-color: var(--orange); }
+
 @media (max-width: 520px) {
   .btn-spin { width: 100%; padding: 16px 0; }
   .controls-row { flex-direction: column; align-items: flex-start; }
