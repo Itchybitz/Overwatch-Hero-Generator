@@ -3,7 +3,11 @@
 const COMPS = {
   "5v5": { tank: 1, damage: 2, support: 2 },
   "6v6": { tank: 2, damage: 2, support: 2 },
+  "solo": { tank: 1, damage: 1, support: 1 }, // caps, not a comp: the lone player may roll any role
 };
+
+const MODE_SIZE = { "5v5": 5, "6v6": 6, "solo": 1 };
+const MODE_LABEL = { "5v5": "5v5", "6v6": "6v6", "solo": "Solo" };
 
 const ROLE_ORDER = ["tank", "damage", "support"];
 const ROLE_LABEL = { tank: "Tank", damage: "Damage", support: "Support" };
@@ -27,6 +31,7 @@ const state = {
   mode: "5v5",
   players: ["", "", "", "", ""],
   playerBans: [[], [], [], [], []], // per-player excluded roles, aligned with players
+  benched: [], // {name, bans} trimmed off by a mode switch, restored on the next size-up
   banned: new Set(),
   instant: false,
   portraits: true,
@@ -48,6 +53,7 @@ function saveState() {
       mode: state.mode,
       players: state.players,
       playerBans: state.playerBans,
+      benched: state.benched,
       banned: [...state.banned],
       instant: state.instant,
       portraits: state.portraits,
@@ -71,6 +77,14 @@ function loadState() {
       Array.isArray(saved.playerBans?.[i])
         ? saved.playerBans[i].filter(r => ROLE_ORDER.includes(r))
         : []);
+    if (Array.isArray(saved.benched)) {
+      state.benched = saved.benched
+        .filter(b => b && typeof b.name === "string")
+        .map(b => ({
+          name: b.name.slice(0, 24),
+          bans: Array.isArray(b.bans) ? b.bans.filter(r => ROLE_ORDER.includes(r)) : [],
+        }));
+    }
     if (Array.isArray(saved.banned)) {
       const names = new Set(HEROES.map(h => h.name));
       state.banned = new Set(saved.banned.filter(n => names.has(n)));
@@ -85,7 +99,7 @@ function loadState() {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-const teamSize = () => Object.values(COMPS[state.mode]).reduce((a, b) => a + b, 0);
+const teamSize = () => MODE_SIZE[state.mode];
 
 const availableHeroes = role =>
   HEROES.filter(h => h.role === role && !state.banned.has(h.name));
@@ -612,7 +626,7 @@ function resultsAsText() {
     const perks = r.perkMinor ? ` (${r.perkMinor.name} / ${r.perkMajor.name})` : "";
     return `${ROLE_EMOJI[r.role]} ${r.player} → ${r.hero}${perks}`;
   });
-  return `🎰 OVERWATCH SLOTS — ${state.mode}\n${lines.join("\n")}\nSpin your own: ${shareUrl()}`;
+  return `🎰 OVERWATCH SLOTS — ${MODE_LABEL[state.mode] || state.mode}\n${lines.join("\n")}\nSpin your own: ${shareUrl()}`;
 }
 
 async function copyToClipboard(text) {
@@ -827,8 +841,18 @@ modeToggle.addEventListener("click", e => {
   state.mode = btn.dataset.mode;
   const size = teamSize();
   if (state.players.length > size) {
+    // bench the overflow instead of deleting it — switching back restores the squad
+    state.benched = state.players.slice(size)
+      .map((name, k) => ({ name, bans: state.playerBans[size + k] || [] }))
+      .concat(state.benched);
     state.players.length = size;
     state.playerBans.length = size;
+  } else {
+    while (state.players.length < size && state.benched.length) {
+      const b = state.benched.shift();
+      state.players.push(b.name);
+      state.playerBans.push(b.bans);
+    }
   }
   saveState();
   renderMode();
