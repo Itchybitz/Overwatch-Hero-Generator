@@ -1,5 +1,6 @@
 # 🎰 Overwatch Slots
-<img width="2297" height="1258" alt="image" src="https://github.com/user-attachments/assets/3283918d-fbde-4fdf-a34e-da14902faf69" />
+<img width="2094" height="1184" alt="image" src="https://github.com/user-attachments/assets/2bcc9484-bbf2-4ab2-8159-38cf5580f35c" />
+
 
 
 **Spin the wheel. Play what fate gives you.**
