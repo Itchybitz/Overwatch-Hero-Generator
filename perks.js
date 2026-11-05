@@ -6,9 +6,9 @@ const PERKS = {
   "Ana": {
     "minor": [
       {
-        "name": "Groggy",
-        "desc": "Enemies waking from Sleep Dart are slowed and take 50 damage over 2 seconds.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/261f0fabdaf55159b9e13103abd465cfe3bf50a3906f97b1a47e9c2dc961905b.png"
+        "name": "Local Anesthetic",
+        "desc": "Sleep dart explodes on impact, slowing enemies and dealing 45 damage over 3 seconds.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/ae02fae670005f987ff17803a469c958a1281c236aa2817fd1b8a03e119ad77d.png"
       },
       {
         "name": "Speed Serum",
@@ -168,7 +168,7 @@ const PERKS = {
       },
       {
         "name": "Giddy Up",
-        "desc": "After using Combat Roll, Cassidy gains a speed boost that decays over 1.5 seconds.",
+        "desc": "After using Combat Roll, Cassidy gains a 60% movement speed boost that decays over 1.5 seconds.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/b0d48ad9c8bdf1ce4ec5aeb9fe01b8fe8c1db55e4a5c411eedb74a7c41967526.png"
       }
     ],
@@ -193,7 +193,7 @@ const PERKS = {
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/a49a4aa586ec9a0f10b16d299e541fdfeb6da4ee2c1bf75a4f2bab1f4170ee45.png"
       },
       {
-        "name": "MEKA Mobilitiy",
+        "name": "MEKA Mobility",
         "desc": "While holding Power Barrier, Propulsors fuel cost is reduced by 30%.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/8d2f97ae5a2dc9b137d45bcf277030fc32754a67155c55d3d7f0525d6ea9ac6e.png"
       }
@@ -208,6 +208,32 @@ const PERKS = {
         "name": "Focused Fusion",
         "desc": "Fusion Repeater fires stronger shots with no spread at a slower rate.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/46d8466d7de4b04dea213c55cae621e407206055eb3b9247796b3f8cd7ba2b4e.png"
+      }
+    ]
+  },
+  "D.Va": {
+    "minor": [
+      {
+        "name": "Bunny Power",
+        "desc": "Eject grants 75 temporary overhealth and Call Mech’s damage radius is increased by 50%.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/54ead00f47feb653f1f96d36df958d12a4d8134f800e6047985011ee5e636f2c.png"
+      },
+      {
+        "name": "Extended Boosters",
+        "desc": "Hitting an enemy with Boosters deals 40% increased damage and extends the duration by 0.5 seconds.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/b608a2bec9030da11e1ba0aaaa09276ab5bbd50f5c4b29b937c6fea7292145b0.png"
+      }
+    ],
+    "major": [
+      {
+        "name": "Shield System",
+        "desc": "Convert 100 health to shields. Defense Matrix restores shields based on 25% of its damage absorbed.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/8c050a50706ca610e8a4500865366d993e644125f1b2a987e6c763d9cc5d7763.png"
+      },
+      {
+        "name": "Precision Fusion",
+        "desc": "Press R to reduce Fusion Cannons' spread by 75% for 3 seconds.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/8399d146264d0b180cf50a2e96661d7ae408a4a7eb60cad67c80812a18c35f1a.png"
       }
     ]
   },
@@ -289,32 +315,6 @@ const PERKS = {
       }
     ]
   },
-  "D.Va": {
-    "minor": [
-      {
-        "name": "Bunny Power",
-        "desc": "Eject grants 75 temporary overhealth and Call Mech’s damage radius is increased by 50%.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/54ead00f47feb653f1f96d36df958d12a4d8134f800e6047985011ee5e636f2c.png"
-      },
-      {
-        "name": "Extended Boosters",
-        "desc": "Hitting an enemy with Boosters deals 40% increased damage and extends the duration by 0.5 seconds.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/b608a2bec9030da11e1ba0aaaa09276ab5bbd50f5c4b29b937c6fea7292145b0.png"
-      }
-    ],
-    "major": [
-      {
-        "name": "Shield System",
-        "desc": "Convert 100 health to shields. Defense Matrix restores shields based on 25% of its damage absorbed.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/8c050a50706ca610e8a4500865366d993e644125f1b2a987e6c763d9cc5d7763.png"
-      },
-      {
-        "name": "Precision Fusion",
-        "desc": "Press R to reduce Fusion Cannons' spread by 75% for 3 seconds.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/8399d146264d0b180cf50a2e96661d7ae408a4a7eb60cad67c80812a18c35f1a.png"
-      }
-    ]
-  },
   "Echo": {
     "minor": [
       {
@@ -345,7 +345,7 @@ const PERKS = {
     "minor": [
       {
         "name": "Suppressive Security",
-        "desc": "Override Protocol’s light rounds slow enemies by 30% for 1.5 second.",
+        "desc": "Override Protocol’s light rounds slow enemies by 30% for 1.5 seconds.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/241ca51517666e1a6d64dda896c55d67151beab7e7ba1a54936beddb00186261.png"
       },
       {
@@ -371,7 +371,7 @@ const PERKS = {
     "minor": [
       {
         "name": "Relentless Barrage",
-        "desc": "Direct hits with Take Aim refund 8 automatic bolt ammo.",
+        "desc": "Direct hits with Take Aim refund 5 automatic bolt ammo.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/b4716c0312754221a259f0d7dd2bf04eb3671b8f2bb70692854217403137d0d4.png"
       },
       {
@@ -662,7 +662,7 @@ const PERKS = {
       },
       {
         "name": "Beat Drop",
-        "desc": "Amp it Up is active during Sound Barrier.",
+        "desc": "Amp It Up is active for 4 seconds after casting Sound Barrier.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/4639fbbde04ac4e8ca26a56ebd4ddc3f34ccf5c20add8796fe2282a2b2b739fa.png"
       }
     ],
@@ -865,7 +865,7 @@ const PERKS = {
     "minor": [
       {
         "name": "Relentless Form",
-        "desc": "While Nemesis Form is active, eliminations extend the duration by 2 second. Half duration gained during Annihilation.",
+        "desc": "While Nemesis Form is active, eliminations extend the duration by 2 seconds. Half duration gained during Annihilation.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/8671fcad5ba90ab73fe1c01d831801d5ecac6f9b75bf1bbabde065d2277dc4de.png"
       },
       {
@@ -943,13 +943,13 @@ const PERKS = {
     "minor": [
       {
         "name": "Scrap Hook",
-        "desc": "Chain Hook hits reload 2 ammo.",
+        "desc": "Chain Hook hits reload 4 ammo.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/2ca8a50b6b369d47a33ec5d4a3e42e12ca1aebb8144a29d959a134fb4226934a.png"
       },
       {
-        "name": "Shrapnel Launcher",
-        "desc": "Extend the range of Scrap Gun's secondary fire by 50% and tighten its burst spread by 25%.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/d48d0b264d765e3732abda784e986595f7a6c5ad0e56f1929c008ffc0492a39d.png"
+        "name": "Here, Piggy Piggy",
+        "desc": "During Whole Hog, Chain Hook's cooldown is reduced by 80%.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/4b0364924157ffcb8dc2673e4e1daf86c8e3651b664bc9c1cc494a281dfaabba.png"
       }
     ],
     "major": [
@@ -959,18 +959,18 @@ const PERKS = {
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/bbeb9d0110d04466eda5f4a845bd27685f80703264c967c0cf224f1b99d6f49d.png"
       },
       {
-        "name": "Pulled Pork",
-        "desc": "Gain overhealth based on how far you pull enemies with Chain Hook, up to 300.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/db9a0129262448dad0c5f70558b561d77b40c9bc721c0cae1dd75a7ed647d4b7.png"
+        "name": "Toxic Exhaust",
+        "desc": "Enemies in front of Roadhog while Trash Compactor is active are slowed by 30% and take 20 damage per second.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/d9dcccfe7fb8e200ca9b3eec39dc3eec0789f99f8d6de38d26997bd591963eae.png"
       }
     ]
   },
   "Shion": {
     "minor": [
       {
-        "name": "Rapid Reload",
-        "desc": "Evade reloads 9 ammo.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/89b16eb9226b933934040d80842d3bf395e058d7bfebc98f71250ddfcd86e2a4.png"
+        "name": "Survival Instinct",
+        "desc": "Evade's overhealth duration is increased by 1 second.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/2785c741990d138c080612ae2edccaf84fc913b437c559b5f56db2da5244d10c.png"
       },
       {
         "name": "X Machina",
@@ -1098,9 +1098,9 @@ const PERKS = {
   "Sombra": {
     "minor": [
       {
-        "name": "Encrypted Upload",
-        "desc": "Hack can be used while invisible, successful hacks increase the duration of stealth by 3 seconds.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/282c6799d179564162500a2baff9dd78add8c67aab0142ae4164f7da39a95acb.png"
+        "name": "Life Hack",
+        "desc": "EMP applies Hotfix to all nearby allies.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/34e108b70ea2d33e67e973b4e3d62d8c6587a0ea3eea3a9645630f469f3321ae.png"
       },
       {
         "name": "CTRL ALT ESC",
@@ -1110,14 +1110,14 @@ const PERKS = {
     ],
     "major": [
       {
-        "name": "High-Speed Bandwidth",
-        "desc": "Hacked health packs provide allies with 25% increased movement speed and 50 overhealth for 4 seconds.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/74aaa7eed6e3eda7d9336006455230e43c769500027b95e68062ddf836a237ab.png"
+        "name": "Data Packet",
+        "desc": "Hacking health packs with Hotfix reduces its main cooldown by 4 seconds.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/87fec003fc9753ad1d6233bc54f163ef280684396101f9088727e886f15b24fd.png"
       },
       {
-        "name": "Viral Replication",
-        "desc": "Hitting a hacked enemy with Virus spreads Virus to enemies within 8 meters.",
-        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/f07dadc22d6b469a372f58031769729390acbcbd3541d0d4f9f69b98153b5b25.png"
+        "name": "Cybersecurity",
+        "desc": "Cyberspace's healing is doubled on allies below half health.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/28a09178c65bff6e100c872bf029d5c8f98f13f57679ad793b30782546eb027b.png"
       }
     ]
   },
@@ -1163,7 +1163,7 @@ const PERKS = {
     "major": [
       {
         "name": "Anchor Bolts",
-        "desc": "Deploy Turret's throw range is increased by 50% and it can now attach to walls and ceilings.",
+        "desc": "Deploy Turret's throw range is increased by 25% and it can now attach to walls and ceilings.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/5f3ae1fcd2f9a78ae44293324d53c8cd9273b42cf9be0d56ff920ee5f45c589d.png"
       },
       {
@@ -1177,7 +1177,7 @@ const PERKS = {
     "minor": [
       {
         "name": "Temporal Regen",
-        "desc": "Passive health regeneration triggers 50% faster.",
+        "desc": "Passive health regeneration triggers 100% faster.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/abd0ec9faa55dabce39858b243817ae53ac30baf210f7c2214768b60806d9dae.png"
       },
       {
@@ -1324,7 +1324,7 @@ const PERKS = {
       },
       {
         "name": "Adaptive Barrier",
-        "desc": "Adaptive Shield generates a 1.5 second barrier on activation.",
+        "desc": "Adaptive Shield generates a 1 second barrier on activation.",
         "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/91c944d1e02f4bf1619b3b2f81d4af774a08c61d2974ee956e501dfc21a20f41.png"
       }
     ]
