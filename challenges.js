@@ -285,6 +285,10 @@ const CHALLENGES = {
       "Cheer the full name Wuyang with rising excitement every time your team wins a fight.",
       "Open every team fight by solemnly announcing that Wuyang has arrived.",
     ],
+    "Doctrine": [
+      "Deliver a short supervillain monologue in voice chat every time you launch Deliverance.",
+      "Address any teammate carrying your drones only as my test subject for the entire match.",
+    ],
   },
   team: [
     "Everyone group-emotes together on the objective before the first fight of the match.",

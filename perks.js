@@ -211,6 +211,32 @@ const PERKS = {
       }
     ]
   },
+  "Doctrine": {
+    "minor": [
+      {
+        "name": "Saving Grace",
+        "desc": "Invigorating Drones heal for 40 health when applied.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/65d3986853fa5e6fb01fae33f5b50e75956080770eb077149a3fc6438f78f10c.png"
+      },
+      {
+        "name": "Sanguine Siphon",
+        "desc": "Heal for 50% of damage dealt with Infused Eternal Scepter.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/32ffd184fd6bf247ca7539d2d3175659acb8bec2be892a2008c2e281c5f5468f.png"
+      }
+    ],
+    "major": [
+      {
+        "name": "Transfusion",
+        "desc": "Reduce Infuse's cooldown from damage and healing dealt.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/d4231c031993e68b5cd6359ca35be5f1bac7571f0619ada25cd30f48e9091e5a.png"
+      },
+      {
+        "name": "Cost of Life",
+        "desc": "Sacrifice 25 maximum health. Eternal Scepter healing is increased by 20%.",
+        "icon": "https://d15f34w2p8l1cc.cloudfront.net/overwatch/1f60c2577f3709fe41fbf494432e7539b4a942374b301b06a97ed7c0bb11017f.png"
+      }
+    ]
+  },
   "Domina": {
     "minor": [
       {

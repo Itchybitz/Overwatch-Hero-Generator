@@ -93,6 +93,8 @@ const HEROES = [
     img: "https://d15f34w2p8l1cc.cloudfront.net/overwatch/d4e6f1ca45d9f88fa89260787397f141a6f007b14e5b26698883b6a17bab9680.png" },
   { name: "Brigitte", role: "support", color: "#be736e",
     img: "https://d15f34w2p8l1cc.cloudfront.net/overwatch/795fba91376d87d441a7f359ae12a3175dfa95825ccc4414cc6b95b129fc4cb0.png" },
+  { name: "Doctrine", role: "support", color: "#e03a9c",
+    img: "https://d15f34w2p8l1cc.cloudfront.net/overwatch/2492a15c575c12314907d0d77501ec337b4d56796bc7f03e5dfb50d415612bae.png" },
   { name: "Illari", role: "support", color: "#f0d67a",
     img: "https://d15f34w2p8l1cc.cloudfront.net/overwatch/ce42d1455e03e79f321345fea84b27a8918b5db8bd7ab9b2ca9e569606ede9e4.png" },
   { name: "Jetpack Cat", role: "support", color: "#f5a344",
