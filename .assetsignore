@@ -1,0 +1,6 @@
+.git
+.gitattributes
+.gitignore
+.assetsignore
+.wrangler
+Thumbs.db
